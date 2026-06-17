@@ -1,0 +1,16 @@
+node_modules/
+public/
+resources/_gen/
+.hugo_build.lock
+output/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

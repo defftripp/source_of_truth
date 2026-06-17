@@ -1,0 +1,19 @@
+---
+description: Project-local canon and documentation workflow
+alwaysApply: true
+---
+
+# Project Canon
+
+Read `AGENTS.md` first. It is the source of truth for documentation style, planning order, checkpoint execution, evidence, and tool boundaries in this project.
+
+This Cursor rule is a thin wrapper. Do not add project rules here unless they are also reflected in `AGENTS.md` or intentionally scoped only to Cursor behavior.
+
+## Working Pattern
+
+1. Reconstruct context from files.
+2. Follow the active project docs and stage/checkpoint plan.
+3. Keep changes scoped.
+4. Run relevant checks.
+5. Write evidence for checkpoint-weight work.
+6. Promote repeated lessons into the shared Source of Truth only when reusable.

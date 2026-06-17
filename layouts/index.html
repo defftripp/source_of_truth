@@ -1,0 +1,28 @@
+{{ define "main" }}
+<h1>Source of Truth</h1>
+<p>Личный AI Engineering playbook: как превращать идеи, ссылки, research и агентские эксперименты в устойчивую систему работы.</p>
+
+<div class="callout">
+  <strong>Главный принцип</strong>
+  <p>Новая фича или хайповый репозиторий не становится правилом сразу. Сначала research, потом извлеченный pattern, потом обновление playbook, и только потом автоматизация.</p>
+</div>
+
+<h2>Последнее</h2>
+<ul class="post-list">
+  {{ range first 8 .Site.RegularPages.ByDate.Reverse }}
+  <li>
+    <span class="meta">{{ .Date.Format "2006-01-02" }}</span>
+    <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+  </li>
+  {{ end }}
+</ul>
+
+<h2>Карта</h2>
+<ul>
+  <li><a href="/playbook/">Playbook</a> - стабильные правила и workflow.</li>
+  <li><a href="/research/">Research</a> - разборы репозиториев, инструментов и подходов.</li>
+  <li><a href="/prompts/">Prompts</a> - рабочие промпты, которые можно переиспользовать.</li>
+  <li><a href="/blog/">Blog</a> - публичные статьи и манифесты.</li>
+</ul>
+{{ end }}
+

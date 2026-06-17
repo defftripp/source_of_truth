@@ -9,6 +9,7 @@ Canonical operating guide for projects that use this source-of-truth pack.
 - make project progress legible to humans and agents
 - turn repeated fixes into reusable rules
 - keep stable canon separate from volatile working context
+- publish reusable AI engineering lessons as blog, playbook, research, and prompts
 
 ## Instruction Order
 
@@ -21,6 +22,7 @@ Canonical operating guide for projects that use this source-of-truth pack.
 ## Required Project Artifacts
 
 - `AGENTS.md`
+- `content/` for public site material
 - `memory/MEMORY.md`
 - `memory/SESSION-HANDOFF.md`
 - `docs/DECISIONS.md` or equivalent ADR file
@@ -34,6 +36,14 @@ Canonical operating guide for projects that use this source-of-truth pack.
 3. Make the smallest useful change that moves the project forward.
 4. Update memory when assumptions, decisions, or next steps change.
 5. When a bug reveals a pattern, promote that lesson into a rule or checklist.
+
+## Publishing Protocol
+
+1. New links start as research, not rules.
+2. Extract reusable patterns before updating playbook pages.
+3. Write public blog posts only when there is a clear personal lesson or repeatable method.
+4. Keep product-specific context out of this repository unless it is explicitly framed as a case study.
+5. Do not publish secrets, private customer/project data, or provider/payment internals.
 
 ## Project Start Protocol
 
@@ -56,4 +66,5 @@ Canonical operating guide for projects that use this source-of-truth pack.
 - next steps are clear
 - memory is updated if project context changed
 - new reusable lessons are promoted into `rules/`, `hooks/`, or `playbooks/`
+- public site content is placed under the correct `content/*` section when the task is publishable
 

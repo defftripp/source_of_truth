@@ -1,0 +1,17 @@
+# Source of Truth
+
+Personal AI Engineering playbook by Defftripp.
+
+Core idea:
+- requirements and product context live in files;
+- research is reference, not automatic requirement;
+- work moves through stages and checkpoints;
+- agent output is verified by reviewer/test-auditor/security scopes;
+- every meaningful change leaves evidence.
+
+Main sections:
+- /blog/
+- /playbook/
+- /research/
+- /prompts/
+

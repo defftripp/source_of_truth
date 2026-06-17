@@ -1,0 +1,34 @@
+baseURL = 'https://source-of-truth.dev/'
+locale = 'ru'
+title = 'Source of Truth'
+defaultContentLanguage = 'ru'
+enableRobotsTXT = true
+
+[taxonomies]
+  tag = "tags"
+
+[permalinks]
+  blog = '/blog/:contentbasename/'
+  playbook = '/playbook/:contentbasename/'
+  research = '/research/:contentbasename/'
+  prompts = '/prompts/:contentbasename/'
+
+[params]
+  author = 'Defftripp'
+  description = 'Личный AI Engineering playbook: документация, агенты, research, prompts и evidence-driven разработка.'
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.highlight]
+    codeFences = true
+    guessSyntax = false
+    lineNos = false
+    style = 'github'
+
+[outputs]
+  home = ['HTML', 'RSS']
+  section = ['HTML', 'RSS']
+  taxonomy = ['HTML']
+  term = ['HTML']

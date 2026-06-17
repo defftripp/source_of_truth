@@ -1,0 +1,15 @@
+{
+  "name": "source-of-truth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal AI Engineering playbook and blog.",
+  "scripts": {
+    "dev": "hugo server -D",
+    "build": "hugo --gc --minify",
+    "check": "hugo --gc --minify"
+  },
+  "devDependencies": {
+    "hugo-extended": "^0.163.2"
+  }
+}
+
