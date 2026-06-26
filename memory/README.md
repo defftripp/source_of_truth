@@ -1,12 +1,11 @@
 # Memory Templates
 
-Persistent memory keeps projects resumable.
+Постоянная memory делает проекты возобновляемыми.
 
-Use these templates inside target projects:
+Использовать эти templates внутри target projects:
 
-- `MEMORY.template.md`: long-lived project state
-- `SESSION-HANDOFF.template.md`: what changed during the latest session
-- `DECISIONS.template.md`: lightweight decision log
+- `MEMORY.template.md`: долгоживущее состояние проекта.
+- `SESSION-HANDOFF.template.md`: что изменилось в последней сессии.
+- `DECISIONS.template.md`: легкий decision log.
 
-The rule is simple: if another agent cannot continue from files alone, memory is not good enough yet.
-
+Правило простое: если другой агент не может продолжить только по файлам, memory еще недостаточно хороша.

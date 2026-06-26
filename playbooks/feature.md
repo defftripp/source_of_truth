@@ -1,26 +1,25 @@
 # Feature
 
-## Goal
+## Цель
 
-Ship a new capability without accidental scope creep.
+Доставить новую возможность без случайного scope creep.
 
-## Steps
+## Шаги
 
-1. State the user-visible outcome.
-2. Write scope, anti-scope, constraints, verification, and stop condition.
-3. Name affected modules, files, or boundaries.
-4. Define the smallest checkpoint that proves the feature works.
-5. Use read-only `explorer`, `reviewer`, `test-auditor`, or `browser-debug` subagents when the blast radius is non-trivial.
-6. Implement the checkpoint with one main patch owner.
-7. Verify behavior.
-8. Write evidence and record follow-up work separately instead of silently expanding scope.
+1. Сформулировать user-visible outcome.
+2. Записать scope, anti-scope, constraints, verification и stop condition.
+3. Назвать affected modules, files или boundaries.
+4. Определить самый маленький checkpoint, который доказывает, что feature работает.
+5. Использовать read-only `explorer`, `reviewer`, `test-auditor` или `browser-debug`, если blast radius нетривиальный.
+6. Реализовать checkpoint через одного main patch owner.
+7. Проверить поведение.
+8. Записать evidence, а follow-up work вынести отдельно вместо тихого расширения scope.
 
 ## Checklist
 
-- scope is explicit
-- anti-scope is explicit
-- success condition is observable
-- verification exists
-- evidence path exists for checkpoint-weight work
-- memory updated if architecture or workflow changed
-
+- scope явный;
+- anti-scope явный;
+- success condition наблюдаемая;
+- verification существует;
+- evidence path есть для checkpoint-weight work;
+- memory обновлена, если изменилась architecture или workflow.

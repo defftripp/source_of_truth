@@ -1,44 +1,44 @@
 # AGENTS.md
 
-Canonical operating guide for projects that use this source-of-truth pack.
+Канонический operating guide для проектов, которые используют этот source-of-truth pack.
 
-## Goals
+## Цели
 
-- reduce startup entropy
-- keep important context outside chat
-- make project progress legible to humans and agents
-- turn repeated fixes into reusable rules
-- keep stable canon separate from volatile working context
-- publish reusable AI engineering lessons as blog, playbook, research, and prompts
+- уменьшать startup entropy;
+- держать важный контекст вне чата;
+- делать progress проекта понятным человеку и агенту;
+- превращать повторяемые fixes в reusable rules;
+- отделять stable canon от volatile working context;
+- публиковать reusable AI engineering lessons как blog, playbook, research и prompts.
 
-## Instruction Order
+## Порядок Инструкций
 
-1. User request
-2. Project-local `AGENTS.md`
-3. Relevant files in `rules/`
-4. Relevant files in `playbooks/`
-5. Relevant project memory files
+1. User request.
+2. Project-local `AGENTS.md`.
+3. Релевантные файлы в `rules/`.
+4. Релевантные файлы в `playbooks/`.
+5. Релевантные project memory files.
 
-## Required Project Artifacts
+## Обязательные Артефакты Проекта
 
 - `AGENTS.md`
-- `content/` for public site material
+- `content/` для public site material
 - `memory/MEMORY.md`
 - `memory/SESSION-HANDOFF.md`
-- `docs/DECISIONS.md` or equivalent ADR file
+- `docs/DECISIONS.md` или эквивалент ADR
 - `develop/README.md`
 - `develop/IMPLEMENTATION_PLAN.md`
 - `develop/LOCAL_RUNBOOK.md`
-- `develop/TODO.md` for local task queue
-- `develop/CHECKPOINT.md` for the active local checkpoint
-- `develop/stages/` for durable stage and checkpoint specs
-- `develop/artifacts/` for checkpoint evidence, findings, handoffs, and links to heavy artifacts
-- `work/` for volatile working artifacts
-- `archive/` for closed artifacts that should not stay in the hot path
+- `develop/TODO.md` для локальной очереди
+- `develop/CHECKPOINT.md` для активного checkpoint
+- `develop/stages/` для durable stage/checkpoint specs
+- `develop/artifacts/` для evidence, findings, handoffs и ссылок на heavy artifacts
+- `work/` для volatile working artifacts
+- `archive/` для закрытых artifacts вне hot path
 
-## Canonical Project Flow
+## Канонический Project Flow
 
-Every project should follow the same operating spine:
+Каждый проект идет по одному operating spine:
 
 ```text
 local intake
@@ -55,74 +55,74 @@ local intake
   -> promoted rule/playbook/hook only when reusable
 ```
 
-Use this spine for Codex, Claude, Cursor, or any other agent host. Tool-specific files are thin wrappers around the same canon.
+Этот spine одинаковый для Codex, Claude, Cursor и любого другого agent host. Tool-specific файлы - только thin wrappers вокруг того же canon.
 
-## Task Routing
+## Роутинг Задач
 
-- Product idea or vague request: write the smallest useful PRD or SPEC before implementation.
-- Feature/enhancement: define user-visible outcome, scope, anti-scope, checks, stop condition, and checkpoint evidence path.
-- Bug: reproduce or describe expected vs actual behavior, add or name the regression barrier, then patch.
-- Research/tool/reference link: start as `content/research/`; extract reusable patterns before changing rules or playbooks.
-- Blog/public content: keep private project data out unless it is explicitly framed as a safe case study.
-- Local queue is the default. Do not require GitHub Issues or Projects unless the user explicitly asks for them.
+- Product idea или vague request: сначала написать самый маленький useful PRD или SPEC.
+- Feature/enhancement: определить user-visible outcome, scope, anti-scope, checks, stop condition и checkpoint evidence path.
+- Bug: воспроизвести или описать expected vs actual behavior, добавить или назвать regression barrier, потом patch.
+- Research/tool/reference link: сначала `content/research/`, потом extracted patterns, и только после этого rules/playbooks.
+- Blog/public content: не переносить private project data, если это явно не safe case study.
+- Local queue - default. Не требовать GitHub Issues или Projects, если пользователь явно не попросил.
 
 ## Agent Operating Model
 
-- One main agent owns the final patch.
-- Subagents are read-only by default: `explorer`, `reviewer`, `test-auditor`, `docs-researcher`, and `browser-debug`.
-- A worker may edit only when the stage explicitly grants a narrow disjoint write scope.
-- Subagent findings are inputs, not proof of completion. Completion still requires local evidence.
-- For long or risky work, create checkpoint artifacts outside chat so state survives thread loss.
+- Один main agent владеет итоговым patch.
+- Subagents read-only по умолчанию: `explorer`, `reviewer`, `test-auditor`, `docs-researcher`, `browser-debug`.
+- `worker` может редактировать только если stage явно выдал narrow disjoint write scope.
+- Findings от subagents - входные данные, а не proof of completion. Completion требует local evidence.
+- Для длинной или рискованной работы создавать checkpoint artifacts вне чата.
 
 ## Halt Gates
 
-Stop and record a blocker instead of improvising when:
+Остановиться и записать blocker вместо импровизации, если:
 
-- required secrets, provider credentials, payments, deploy access, or cost approval are missing;
-- checks cannot be run in the local environment and no narrower proof is valid;
-- implementation would violate PRD, ADR, product invariants, or explicit anti-scope;
-- evidence would expose secrets, private customer data, signed URLs, payment data, or raw provider payloads;
-- the change requires rewriting unrelated areas to make the checkpoint pass.
+- нужны secrets, provider credentials, payments, deploy access или cost approval;
+- checks нельзя запустить локально и нет валидного более узкого proof;
+- implementation нарушит PRD, ADR, product invariants или explicit anti-scope;
+- evidence раскроет secrets, private customer data, signed URLs, payment data или raw provider payloads;
+- change требует переписать unrelated areas, чтобы checkpoint прошел.
 
 ## Default Working Protocol
 
-1. Read the project goal, `AGENTS.md`, and current memory before doing work.
-2. Choose the matching playbook from `playbooks/`.
-3. Create or update the active plan/checkpoint spec when the work is non-trivial.
-4. Make the smallest useful change that moves the project forward.
-5. Run the relevant verification gate or record the explicit blocker.
-6. Write evidence for checkpoint-weight work.
-7. Update memory when assumptions, decisions, or next steps change.
-8. When a bug reveals a pattern, promote that lesson into a rule or checklist.
+1. Прочитать project goal, `AGENTS.md` и current memory.
+2. Выбрать matching playbook из `playbooks/`.
+3. Для нетривиальной работы создать или обновить active plan/checkpoint spec.
+4. Сделать самый маленький useful change, который двигает проект.
+5. Запустить relevant verification gate или записать explicit blocker.
+6. Написать evidence для checkpoint-weight work.
+7. Обновить memory, если изменились assumptions, decisions или next steps.
+8. Если bug выявил pattern, поднять lesson в rule или checklist.
 
 ## Publishing Protocol
 
-1. New links start as research, not rules.
-2. Extract reusable patterns before updating playbook pages.
-3. Write public blog posts only when there is a clear personal lesson or repeatable method.
-4. Keep product-specific context out of this repository unless it is explicitly framed as a case study.
-5. Do not publish secrets, private customer/project data, or provider/payment internals.
+1. Новые links начинаются как research, не rules.
+2. Перед обновлением playbook pages извлечь reusable patterns.
+3. Public blog posts писать только когда есть clear personal lesson или repeatable method.
+4. Product-specific context не держать в этом repo, если он явно не оформлен как case study.
+5. Не публиковать secrets, private customer/project data или provider/payment internals.
 
 ## Project Start Protocol
 
-1. Clarify scope, constraints, and definition of done.
-2. Establish canon files before large implementation starts.
-3. Create a first milestone with a narrow, testable outcome.
-4. Prepare memory and local task tracking before parallel work begins.
+1. Уточнить scope, constraints и definition of done.
+2. Создать canon files до большой implementation.
+3. Создать первый milestone с narrow, testable outcome.
+4. Подготовить memory и local task tracking до parallel work.
 
 ## Maintenance Protocol
 
-1. Reconstruct context from files, not from vague recollection.
-2. Prefer backlog items with explicit outcomes and touched areas.
-3. Keep handoff notes fresh enough that another agent can continue the work.
-4. Archive stale experiments out of the hot path.
+1. Восстанавливать контекст из файлов, не из vague recollection.
+2. Предпочитать backlog items с explicit outcomes и touched areas.
+3. Держать handoff notes свежими, чтобы другой агент мог продолжить.
+4. Archive stale experiments вне hot path.
 
 ## Done Criteria
 
-- code or docs changed for the target task
-- verification is recorded
-- next steps are clear
-- memory is updated if project context changed
-- new reusable lessons are promoted into `rules/`, `hooks/`, or `playbooks/`
-- public site content is placed under the correct `content/*` section when the task is publishable
+- code или docs изменены для target task;
+- verification записана;
+- next steps понятны;
+- memory обновлена, если project context изменился;
+- новые reusable lessons подняты в `rules/`, `hooks/` или `playbooks/`;
+- public site content лежит в правильном `content/*` section, если task publishable.
 

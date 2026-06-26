@@ -5,26 +5,26 @@ alwaysApply: true
 
 # Agent Workflow
 
-Use the same operating flow in every project.
+Во всех проектах использовать один и тот же operating flow.
 
-## Canonical Flow
+## Канонический Flow
 
 ```text
 intake -> source-of-truth read -> plan/checkpoint -> /goal -> subagent findings -> main patch -> verification -> evidence -> memory -> lesson promotion
 ```
 
-## Hard Rules
+## Жесткие Правила
 
-- One main agent owns final edits.
-- Subagents are read-only unless a checkpoint explicitly assigns a narrow disjoint write scope.
-- Non-trivial work needs a plan or checkpoint spec before implementation.
-- Every checkpoint needs scope, anti-scope, verification, evidence path and stop condition.
-- Verification must match the risk and blast radius.
-- State must live in files, not only in chat.
-- Research links become research notes first, then patterns, then playbook/rule changes if reusable.
+- Один main agent владеет итоговыми правками.
+- Subagents read-only, если checkpoint явно не назначил narrow disjoint write scope.
+- Нетривиальная работа требует plan или checkpoint spec до implementation.
+- Каждый checkpoint требует scope, anti-scope, verification, evidence path и stop condition.
+- Verification должна соответствовать риску и blast radius.
+- Состояние живет в файлах, а не только в chat.
+- Research links сначала становятся research notes, потом patterns, и только потом playbook/rule changes, если lesson reusable.
 
-## Stop Instead Of Guessing
+## Остановиться Вместо Догадок
 
-Stop and record a blocker when required credentials, payment/provider approval, deploy access, official-doc verification, or local test ability is missing.
+Остановиться и записать blocker, если не хватает credentials, payment/provider approval, deploy access, official-doc verification или возможности локально запустить проверку.
 
-Do not invent proof. A narrow check cannot prove a broad requirement.
+Не выдумывать proof. Узкая проверка не доказывает широкое требование.

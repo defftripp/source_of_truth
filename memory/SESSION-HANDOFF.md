@@ -2,24 +2,27 @@
 
 ## Session Summary
 
-- Strengthening the reusable project operating flow across `source_of_truth`.
-- External references checked: ferrumctl, ECC, AgentFlow, Personal Corp Skills and sereja.tech/aicorp.
-- Real project patterns inspected from `D:\WORK\db` and `D:\WORK\canvas`.
-- GitHub-facing README was updated so the repository is understandable immediately from GitHub, while daily work stays local in `develop/TODO.md` and `develop/CHECKPOINT.md`.
+- Усиливается reusable project operating flow в `source_of_truth`.
+- Проверены external references: ferrumctl, ECC, AgentFlow, Personal Corp Skills и sereja.tech/aicorp.
+- Рабочие patterns изучены в `D:\WORK\db` и `D:\WORK\canvas`.
+- GitHub-facing `README.md` обновлен так, чтобы репозиторий был понятен сразу с GitHub.
+- Daily work остается локальным: `develop/TODO.md` для очереди и `develop/CHECKPOINT.md` для active slice.
+- После замечания пользователя канон и starter переводятся на русский; английскими остаются только commands, paths, statuses и identifiers.
 
 ## Active Checkpoint
 
-- stage: local-first workflow presentation
-- checkpoint: make the repository understandable from GitHub while keeping daily work local
+- stage: русификация local-first workflow presentation
+- checkpoint: сделать README, AGENTS, playbooks, rules, starter и memory читаемыми на русском
 - status: DONE
-- evidence: rewritten `README.md`, starter local queue files, `npm run check`, `git diff --check`
+- evidence: переведенные `README.md`, `AGENTS.md`, `playbooks/**`, `rules/agent-workflow.mdc`, `templates/project-starter/**`, `memory/**`, `docs/DECISIONS.md`; `npm run check`, `git diff --check`, bootstrap smoke
 
 ## Verified
 
-- `npm run check` - PASS, Hugo built 49 pages.
-- `git diff --check` - PASS, only Windows LF-to-CRLF normalization warnings.
-- `powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPath output\bootstrap-smoke -Force` - PASS, copied starter skeleton including hidden wrappers and `develop/`.
-- Root `.github` task/PR templates were removed after the local-first decision.
+- `npm run check` - PASS, Hugo собрал 49 pages.
+- `git diff --check` - PASS, остались только Windows LF-to-CRLF normalization warnings.
+- `powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPath output\bootstrap-smoke-russian -Force` - PASS, starter skeleton копируется с hidden wrappers и `develop/`.
+- Поиск очевидного English boilerplate через `rg` - PASS, совпадений нет.
+- Root `.github` task/PR templates удалены после local-first decision.
 
 ## Files Touched
 
@@ -37,15 +40,15 @@
 
 ## Risks Or Unknowns
 
-- Hook enforcement is still documented, not implemented as executable scripts.
-- GitHub Issues/Projects are intentionally not part of the default workflow.
+- Hook enforcement пока описан текстом, executable scripts еще не добавлены.
+- GitHub Issues/Projects намеренно не входят в default workflow.
+- Bootstrap script оставлен ASCII-safe: русские сообщения декодируются из UTF-8 base64, чтобы Windows PowerShell не ломал кириллицу без BOM.
 
 ## Next Best Action
 
-- Consider adding executable hook scripts for checkpoint checklist enforcement.
-- Keep local queue files as the default task surface.
+- Рассмотреть hook scripts для checkpoint checklist enforcement, если текстового протокола станет мало.
 
 ## Notes For The Next Agent
 
-- Continue from files, not chat memory.
-- Do not modify `D:\WORK\db` or `D:\WORK\canvas`; they were used only as references for this task.
+- Продолжать из файлов, не из chat memory.
+- Не менять `D:\WORK\db` и `D:\WORK\canvas`; они использовались только как references для этой задачи.

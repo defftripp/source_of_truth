@@ -1,20 +1,19 @@
 # Local TODO
 
-Local-first task queue. Use this instead of GitHub Issues unless public collaboration is explicitly needed.
+Local-first очередь задач. Использовать ее вместо GitHub Issues, если публичная совместная работа явно не нужна.
 
-## Now
+## Сейчас
 
-- [ ] Define the first checkpoint in `develop/CHECKPOINT.md`.
+- [ ] Определить первый checkpoint в `develop/CHECKPOINT.md`.
 
-## Next
+## Дальше
 
-- [ ] Add the first stage/checkpoint spec under `develop/stages/`.
+- [ ] Добавить первый stage/checkpoint spec под `develop/stages/`.
 
-## Later
+## Позже
 
-- [ ] Promote reusable lessons into project rules or the shared Source of Truth.
+- [ ] Поднять reusable lessons в project rules или shared Source of Truth.
 
 ## Done
 
 - [ ] Bootstrap project skeleton.
-

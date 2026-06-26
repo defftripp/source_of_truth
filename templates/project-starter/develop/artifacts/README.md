@@ -1,6 +1,6 @@
 # Checkpoint Artifacts
 
-Store durable evidence here. Link heavy files from `output/**` or `work/**`.
+Здесь хранится durable evidence. Тяжелые файлы линковать из `output/**` или `work/**`.
 
 ## Artifact Template
 
@@ -62,4 +62,3 @@ Not touched:
 
 - ...
 ```
-

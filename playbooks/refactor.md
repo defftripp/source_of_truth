@@ -1,21 +1,20 @@
 # Refactor
 
-## Goal
+## Цель
 
-Improve structure without changing intended behavior.
+Улучшить структуру без изменения ожидаемого поведения.
 
-## Steps
+## Шаги
 
-1. Name the current pain clearly.
-2. List invariants that must not change.
-3. Break the refactor into small reversible steps.
-4. Verify behavior after each step.
-5. Stop when the pain is removed; do not turn refactor into a rewrite.
+1. Ясно назвать текущую боль.
+2. Перечислить invariants, которые не должны измениться.
+3. Разбить refactor на маленькие обратимые шаги.
+4. Проверять поведение после каждого шага.
+5. Остановиться, когда боль убрана; не превращать refactor в rewrite.
 
 ## Checklist
 
-- invariants are explicit
-- steps are small
-- behavior verification exists
-- follow-up cleanup is separated from the core refactor
-
+- invariants явные;
+- шаги маленькие;
+- behavior verification существует;
+- follow-up cleanup отделен от core refactor.

@@ -1,9 +1,8 @@
 # Decisions
 
-Write short decision records here.
+Короткие decision records живут здесь.
 
 - date:
 - decision:
 - why:
 - follow-up:
-

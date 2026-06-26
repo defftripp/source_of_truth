@@ -1,14 +1,14 @@
-# Project Operating Flow
+# Операционный Flow Проекта
 
-## Goal
+## Цель
 
-Make every project feel like the same engineering system: clear scope, one active checkpoint, visible state, review gates, and evidence outside chat.
+Сделать так, чтобы каждый проект ощущался одной и той же инженерной системой: понятный scope, один активный checkpoint, видимое состояние, review gates и evidence вне чата.
 
-## When To Use
+## Когда Использовать
 
-Use this for any non-trivial feature, bugfix, refactor, research adoption, release, or project continuation.
+Использовать для любой нетривиальной feature, bugfix, refactor, research adoption, release или продолжения проекта.
 
-Skip the full flow only for tiny edits where the relevant check is obvious and no durable context changes.
+Полный flow можно пропустить только для маленьких правок, где проверка очевидна и durable context не меняется.
 
 ## Flow
 
@@ -16,8 +16,8 @@ Skip the full flow only for tiny edits where the relevant check is obvious and n
 1. Intake
 2. Source-of-truth read
 3. Plan or checkpoint spec
-4. /goal for one bounded checkpoint
-5. Read-only subagents where useful
+4. /goal на один ограниченный checkpoint
+5. Read-only subagents, если полезно
 6. Main agent patch
 7. Verification gate
 8. Evidence artifact
@@ -27,20 +27,20 @@ Skip the full flow only for tiny edits where the relevant check is obvious and n
 
 ## Intake
 
-Classify the input before acting:
+Сначала классифицировать вход, потом действовать:
 
-| Input | First output | Do not do |
+| Вход | Первый выход | Не делать |
 | --- | --- | --- |
-| Product idea | lightweight PRD or SPEC | start production code immediately |
-| Feature/enhancement | checkpoint plan | expand into adjacent cleanup |
-| Bug | repro or expected-vs-actual note | refactor unrelated modules |
-| Research link or repo | research note and pattern extraction | turn hype into requirements |
-| Tool adoption | capability plan and rollback | install broad write access by default |
-| Public article | outline or draft under `content/` | publish private project data |
+| Идея продукта | легкий PRD или SPEC | сразу писать production code |
+| Feature/enhancement | checkpoint plan | расширять задачу в соседний cleanup |
+| Bug | repro или expected-vs-actual note | рефакторить несвязанные модули |
+| Research link или repo | research note и pattern extraction | превращать хайп в требования |
+| Tool adoption | capability plan и rollback | сразу давать широкий write access |
+| Публичная статья | outline или draft под `content/` | публиковать private project data |
 
 ## Checkpoint Spec
 
-Every checkpoint spec must include:
+Каждый checkpoint spec должен включать:
 
 - goal;
 - scope;
@@ -48,13 +48,13 @@ Every checkpoint spec must include:
 - constraints and invariants;
 - touched areas;
 - allowed subagents;
-- verification commands or browser checks;
+- verification commands или browser checks;
 - evidence path;
 - stop condition.
 
 ## Goal Prompt
 
-Use this shape:
+Использовать такую форму:
 
 ```text
 /goal Implement <checkpoint id> from <plan file>.
@@ -66,69 +66,71 @@ Stop only when verification passes with evidence, or when blocked by an explicit
 Write evidence under <artifact path>.
 ```
 
-## Subagent Roles
+Сама команда остается на английском, потому что ее читает агент. Описание задачи, scope и evidence в проекте пишутся на русском, если проект не решил иначе.
 
-| Role | Purpose | Writes |
+## Роли Subagents
+
+| Роль | Зачем нужна | Пишет файлы |
 | --- | --- | --- |
-| `explorer` | affected files, local patterns, likely blast radius | no |
-| `reviewer` | bugs, scope drift, security/privacy leaks | no |
-| `test-auditor` | missing or weak acceptance coverage | no |
-| `docs-researcher` | current official docs and version-sensitive facts | no |
-| `browser-debug` | UI repro, screenshots, traces, visual checks | no |
-| `worker` | narrow implementation slice | only if explicitly assigned |
+| `explorer` | affected files, локальные patterns, likely blast radius | нет |
+| `reviewer` | bugs, scope drift, security/privacy leaks | нет |
+| `test-auditor` | missing or weak acceptance coverage | нет |
+| `docs-researcher` | свежие official docs и version-sensitive facts | нет |
+| `browser-debug` | UI repro, screenshots, traces, visual checks | нет |
+| `worker` | узкий implementation slice | только если явно назначен |
 
 ## Verification Gate
 
-Pick checks by blast radius:
+Выбирать проверки по blast radius:
 
-- backend/API: focused tests first, broader suite when shared contracts changed;
-- frontend/UI: focused component tests, lint/build for shared changes, browser screenshots for visible behavior;
-- data/schema: migration, schema docs, rollback or compatibility note;
-- provider/payment/deploy: dry-run or sandbox proof, redaction scan, explicit cost/access boundary;
-- docs-only: link check, build, and consistency with AGENTS/playbooks.
+- backend/API: сначала focused tests, broader suite когда изменены shared contracts;
+- frontend/UI: focused component tests, lint/build для shared changes, browser screenshots для видимого поведения;
+- data/schema: migration, schema docs, rollback или compatibility note;
+- provider/payment/deploy: dry-run или sandbox proof, redaction scan, explicit cost/access boundary;
+- docs-only: link check, build и consistency с `AGENTS.md`/playbooks.
 
-If a check cannot run, record why and what evidence replaced it. Do not silently downgrade broad requirements into narrow checks.
+Если проверку нельзя запустить, записать почему и какое evidence ее заменило. Нельзя молча подменять широкое требование узкой проверкой.
 
 ## Evidence
 
-Checkpoint evidence lives under:
+Checkpoint evidence лежит под:
 
 ```text
 develop/artifacts/<initiative>/<checkpoint>.md
 ```
 
-or, for checkpoint-heavy projects:
+или, для проектов с тяжелыми checkpoint:
 
 ```text
 develop/artifacts/checkpoints/<stage>/<checkpoint>/summary.md
 ```
 
-Evidence must say:
+Evidence должно сказать:
 
-- inputs read;
-- what changed;
-- what was verified;
-- artifacts/screenshots/logs;
-- scope guard and not-touched areas;
-- reviewer or test-auditor findings;
+- какие inputs прочитаны;
+- что изменилось;
+- что проверено;
+- какие artifacts/screenshots/logs есть;
+- какой scope guard и какие зоны не трогались;
+- что нашли `reviewer` или `test-auditor`;
 - known gaps;
-- next checkpoint;
-- final status: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
+- следующий checkpoint;
+- final status: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED` или `NEEDS_CONTEXT`.
 
-Heavy traces, videos, generated assets, local stores, and bulky logs stay in `output/**` or `work/**` and are linked from the markdown artifact.
+Тяжелые traces, videos, generated assets, local stores и большие logs лежат в `output/**` или `work/**` и только линкуются из markdown artifact.
 
 ## Memory Update
 
-Update `memory/MEMORY.md` when durable project state changes: current milestone, commands, risks, decisions, constraints, or next steps.
+Обновлять `memory/MEMORY.md`, когда меняется durable state проекта: milestone, commands, risks, decisions, constraints или next steps.
 
-Update `memory/SESSION-HANDOFF.md` at the end of meaningful work so another agent can continue without chat history.
+Обновлять `memory/SESSION-HANDOFF.md` в конце значимой работы, чтобы другой агент мог продолжить без истории чата.
 
 ## Lesson Promotion
 
-Use this ladder:
+Лестница такая:
 
 ```text
 evidence note -> checklist -> playbook rule -> hook/script -> skill/plugin
 ```
 
-Promote only when the lesson is reusable across projects or repeatedly painful inside one project.
+Поднимать lesson только когда он переиспользуем между проектами или повторно болит внутри одного проекта.

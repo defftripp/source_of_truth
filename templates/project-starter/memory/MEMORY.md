@@ -2,11 +2,11 @@
 
 ## Goal
 
-- fill this in
+- заполнить
 
 ## Current State
 
-- fill this in
+- заполнить
 
 ## Active Checkpoint
 
@@ -17,24 +17,23 @@
 
 ## Constraints
 
-- fill this in
+- заполнить
 
 ## Important Decisions
 
-- fill this in
+- заполнить
 
 ## Next Steps
 
-- fill this in
+- заполнить
 
 ## Commands
 
 ```text
-# add the commands that actually work in this project
+# добавить команды, которые реально работают в проекте
 ```
 
 ## Open Questions
 
 - question:
 - blocking: yes/no
-

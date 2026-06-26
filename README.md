@@ -1,119 +1,119 @@
 # Source of Truth
 
-Personal AI Engineering playbook and starter kit for agent-assisted projects.
+Личный AI Engineering playbook и starter kit для проектов с агентами.
 
-This repository is the canon for how my projects are started, continued, verified, handed off, and improved. It keeps the working method outside chat history and makes every project feel like the same system: one flow, one vocabulary, one evidence trail.
+Это репозиторий-канон: как мои проекты стартуют, продолжаются, проверяются, передаются между сессиями и улучшаются. Смысл простой: не держать процесс в чате, а сделать так, чтобы каждый проект ощущался одинаково: один flow, один словарь, один след доказательств.
 
-The workflow is local-first. GitHub is the readable front door for the repository, not the required task tracker. Daily work lives in local files under `develop/`, not GitHub Issues.
+Workflow здесь local-first. GitHub нужен как понятная витрина репозитория, а не как обязательный таск-трекер. Ежедневная работа живет в локальных файлах под `develop/`, а не в GitHub Issues.
 
-## What This Is
+## Что Это
 
-`source_of_truth` has two jobs:
+У `source_of_truth` две роли:
 
-| Layer | Purpose | Main paths |
+| Слой | Назначение | Основные пути |
 | --- | --- | --- |
-| Public site | Blog, playbook pages, research notes and reusable prompts | `content/`, `layouts/`, `static/` |
-| Starter kit | Project-local agent rules, memory, stages, evidence, templates and hooks | `templates/project-starter/`, `AGENTS.md`, `playbooks/`, `rules/`, `memory/` |
+| Публичный сайт | Блог, playbook-страницы, research notes и reusable prompts | `content/`, `layouts/`, `static/` |
+| Starter kit | Project-local правила агентов, память, stages, evidence, templates и hooks | `templates/project-starter/`, `AGENTS.md`, `playbooks/`, `rules/`, `memory/` |
 
-It is not a product repo. Product-specific truth belongs in the product repository. This repo holds the reusable operating system.
+Это не продуктовый репозиторий. Правда конкретного продукта должна жить в его репозитории. Здесь лежит переиспользуемая операционная система работы.
 
-## The Flow
+## Flow
 
-Every project should run through the same spine:
+Каждый проект идет по одному позвоночнику:
 
 ```mermaid
 flowchart TD
-    A["Local intake"] --> B["Read AGENTS + memory + active docs"]
+    A["Локальный вход"] --> B["Прочитать AGENTS + memory + активные docs"]
     B --> C["develop/TODO.md"]
     C --> D["develop/CHECKPOINT.md"]
     D --> E["PLAN / SPEC / stage checkpoint"]
-    E --> F["/goal for one bounded checkpoint"]
-    F --> G["Read-only subagents when useful"]
-    G --> H["One main patch owner"]
+    E --> F["/goal на один ограниченный checkpoint"]
+    F --> G["Read-only subagents при необходимости"]
+    G --> H["Один главный владелец patch"]
     H --> I["Verification gate"]
     I --> J["Evidence artifact"]
     J --> K["Memory + handoff update"]
     K --> L["Promote reusable lesson"]
 ```
 
-Short version:
+Коротко:
 
 ```text
 intake -> TODO -> CHECKPOINT -> goal -> patch -> checks -> evidence -> memory -> lesson
 ```
 
-## Quick Start
+## Быстрый Старт
 
-Install and check this repository:
+Установить зависимости и проверить репозиторий:
 
 ```powershell
 npm install
 npm run check
 ```
 
-Start the public site locally:
+Запустить публичный сайт локально:
 
 ```powershell
 npm run dev
 # http://localhost:1313/
 ```
 
-Bootstrap a new project with the operating skeleton:
+Развернуть operating skeleton в новом проекте:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPath D:\WORK\new-project
 ```
 
-Then fill these first:
+Потом первым делом заполнить:
 
 1. `memory/MEMORY.md`
 2. `develop/IMPLEMENTATION_PLAN.md`
 3. `develop/LOCAL_RUNBOOK.md`
 4. `develop/TODO.md`
 5. `develop/CHECKPOINT.md`
-6. first checkpoint spec under `develop/stages/`
-7. project-specific notes in `AGENTS.md`
+6. первый checkpoint spec под `develop/stages/`
+7. project-specific заметки в `AGENTS.md`
 
-## Start Here
+## С Чего Начинать
 
-For humans:
+Для человека:
 
-- [AGENTS.md](AGENTS.md) - canonical operating guide.
-- [playbooks/project-operating-flow.md](playbooks/project-operating-flow.md) - the main checkpoint workflow.
-- [templates/project-starter/README.md](templates/project-starter/README.md) - what lands in a new project.
-- [docs/DECISIONS.md](docs/DECISIONS.md) - durable decisions about this repo.
+- [AGENTS.md](AGENTS.md) - главный operating guide.
+- [playbooks/project-operating-flow.md](playbooks/project-operating-flow.md) - основной checkpoint workflow.
+- [templates/project-starter/README.md](templates/project-starter/README.md) - что попадает в новый проект.
+- [docs/DECISIONS.md](docs/DECISIONS.md) - durable decisions по этому репозиторию.
 
-For agents:
+Для агента:
 
-- Read [AGENTS.md](AGENTS.md) first.
-- Read [memory/MEMORY.md](memory/MEMORY.md) and [memory/SESSION-HANDOFF.md](memory/SESSION-HANDOFF.md).
-- Choose the matching playbook from [playbooks/](playbooks/).
-- Keep project state in files, not chat.
-- For non-trivial work, write or update a checkpoint spec before implementation.
+- Сначала прочитать [AGENTS.md](AGENTS.md).
+- Потом [memory/MEMORY.md](memory/MEMORY.md) и [memory/SESSION-HANDOFF.md](memory/SESSION-HANDOFF.md).
+- Выбрать подходящий playbook из [playbooks/](playbooks/).
+- Держать состояние проекта в файлах, не в чате.
+- Для нетривиальной работы сначала написать или обновить checkpoint spec.
 
-## Repository Map
+## Карта Репозитория
 
 ```text
 source_of_truth/
-  AGENTS.md                         canonical operating guide
-  README.md                         GitHub entry point
-  docs/DECISIONS.md                 durable repo decisions
-  memory/                           live memory plus reusable templates
-  playbooks/                        repeatable workflows
+  AGENTS.md                         главный operating guide
+  README.md                         входная страница для GitHub
+  docs/DECISIONS.md                 durable decisions
+  memory/                           живая память и шаблоны памяти
+  playbooks/                        повторяемые workflow
   rules/                            reusable agent/process rules
-  hooks/                            hook prompt templates and future enforcement points
+  hooks/                            hook prompt templates и будущие enforcement points
   agents/                           reusable specialist agent profiles
-  templates/project-starter/        skeleton copied into new projects
-  content/                          Hugo public site content
+  templates/project-starter/        skeleton для новых проектов
+  content/                          контент Hugo-сайта
   layouts/                          Hugo layouts
-  scripts/bootstrap_project.ps1     starter installer
+  scripts/bootstrap_project.ps1     установщик starter kit
   work/                             volatile local artifacts
-  archive/                          closed or demoted material
+  archive/                          закрытые или демотированные материалы
 ```
 
-## Starter Kit Output
+## Что Получает Новый Проект
 
-A bootstrapped project gets this operating layer:
+После bootstrap в проекте появляется operating layer:
 
 ```text
 project/
@@ -136,82 +136,84 @@ project/
   archive/
 ```
 
-This gives each project the same shape:
+Это дает каждому проекту один и тот же силуэт:
 
-- `AGENTS.md` says how work is run.
-- `memory/` says what is true now.
-- `develop/stages/` says what checkpoint to execute.
-- `develop/artifacts/` proves what happened.
-- `.cursor/` and `.claude/` stay thin wrappers around the same canon.
-- GitHub Issues are optional and not part of the default workflow.
+- `AGENTS.md` говорит, как ведется работа.
+- `memory/` говорит, что сейчас правда.
+- `develop/TODO.md` держит локальную очередь.
+- `develop/CHECKPOINT.md` держит активный срез.
+- `develop/stages/` описывает, что выполнять.
+- `develop/artifacts/` доказывает, что произошло.
+- `.cursor/` и `.claude/` остаются тонкими wrappers вокруг того же canon.
+- GitHub Issues опциональны и не входят в default workflow.
 
-## Task Routing
+## Роутинг Задач
 
-| Input | First output | Gate |
+| Вход | Первый выход | Gate |
 | --- | --- | --- |
-| Product idea | lightweight PRD or SPEC | no implementation until scope is clear |
+| Идея продукта | lightweight PRD или SPEC | не начинать implementation, пока scope не ясен |
 | Feature | checkpoint spec | scope, anti-scope, checks, stop condition |
-| Bug | expected-vs-actual and regression barrier | fix plus proof |
-| Research link or repo | research note | pattern extraction before rule changes |
-| Tool adoption | capability plan | rollback and access boundary |
-| Public article | draft under `content/` | no private project data |
+| Bug | expected-vs-actual и regression barrier | fix плюс proof |
+| Research link или repo | research note | pattern extraction перед rule changes |
+| Tool adoption | capability plan | rollback и access boundary |
+| Публичная статья | draft под `content/` | без private project data |
 
-## Local Task Queue
+## Локальная Очередь
 
-The default queue is file-based:
+Default queue - файловая:
 
-| File | Purpose |
+| Файл | Назначение |
 | --- | --- |
-| `develop/TODO.md` | local backlog and next tasks |
-| `develop/CHECKPOINT.md` | one active bounded slice |
-| `develop/IMPLEMENTATION_PLAN.md` | stage map and current status |
-| `memory/SESSION-HANDOFF.md` | latest resume context |
+| `develop/TODO.md` | локальный backlog и следующие задачи |
+| `develop/CHECKPOINT.md` | один активный ограниченный срез |
+| `develop/IMPLEMENTATION_PLAN.md` | карта stages и текущий статус |
+| `memory/SESSION-HANDOFF.md` | последний resume context |
 
-Use GitHub Issues only when explicitly needed for public collaboration. Local work does not depend on them.
+GitHub Issues использовать только когда явно нужна публичная совместная работа. Локальный flow от них не зависит.
 
-## Agent Roles
+## Роли Агентов
 
-One main agent owns final edits. Subagents are read-only unless a checkpoint explicitly grants a narrow disjoint write scope.
+Один главный агент владеет итоговыми правками. Subagents read-only, если checkpoint явно не выдал narrow disjoint write scope.
 
-| Role | Purpose |
+| Роль | Зачем нужна |
 | --- | --- |
 | `explorer` | affected files, local patterns, blast radius |
 | `reviewer` | scope drift, correctness, security/privacy risks |
 | `test-auditor` | missing or weak acceptance coverage |
-| `docs-researcher` | official docs and version-sensitive facts |
-| `browser-debug` | UI repro, screenshots, traces and visual evidence |
-| `worker` | narrow implementation slice, only when explicitly assigned |
+| `docs-researcher` | official docs и version-sensitive facts |
+| `browser-debug` | UI repro, screenshots, traces и visual evidence |
+| `worker` | узкий implementation slice, только если явно назначен |
 
 ## Evidence Contract
 
-A checkpoint is not done because the agent says it is done. It is done when evidence exists.
+Checkpoint не готов, потому что агент сказал “готово”. Он готов, когда есть evidence.
 
-Evidence should record:
+Evidence фиксирует:
 
-- inputs read;
-- scope and anti-scope;
-- changed files or behavior;
-- verification commands and results;
-- screenshots, traces or logs when relevant;
-- reviewer and test-auditor notes;
+- какие inputs прочитаны;
+- scope и anti-scope;
+- какие файлы или поведение изменились;
+- verification commands и results;
+- screenshots, traces или logs, если уместно;
+- reviewer и test-auditor notes;
 - known gaps;
 - next step;
-- status: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, or `NEEDS_CONTEXT`.
+- status: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, `NEEDS_CONTEXT`.
 
-Reference: [content/playbook/evidence-contract.md](content/playbook/evidence-contract.md).
+Ссылка: [content/playbook/evidence-contract.md](content/playbook/evidence-contract.md).
 
-## Public Site
+## Публичный Сайт
 
-The Hugo site publishes reusable material:
+Hugo-сайт публикует reusable material:
 
-| Section | Purpose |
+| Раздел | Назначение |
 | --- | --- |
-| `content/blog/` | personal lessons and public essays |
-| `content/playbook/` | stable operating rules |
-| `content/research/` | reference scans and tool/repo analysis |
+| `content/blog/` | личные уроки и публичные статьи |
+| `content/playbook/` | стабильные operating rules |
+| `content/research/` | reference scans и tool/repo analysis |
 | `content/prompts/` | reusable prompts |
 
-Build:
+Сборка:
 
 ```powershell
 npm run build
@@ -219,35 +221,35 @@ npm run build
 
 ## Research Policy
 
-New links start as research, not rules.
+Новая ссылка сначала research, а не rule.
 
 ```text
 link -> research note -> extracted pattern -> playbook update -> optional blog post
 ```
 
-Recent reference scan:
+Свежий reference scan:
 
 - [content/research/agent-workflow-reference-scan.md](content/research/agent-workflow-reference-scan.md)
 
-## Design Principles
+## Принципы
 
-- Keep one canon and many thin wrappers.
-- Push context into files, not chat history.
-- Prefer reusable workflows over long prompts.
-- Turn repeated fixes into rules, templates, hooks or skills.
-- Separate stable canon from volatile work artifacts.
-- Treat research as reference, not automatic requirement.
+- Один canon, много тонких wrappers.
+- Контекст в файлах, не в chat history.
+- Reusable workflow лучше длинного prompt.
+- Повторяемые fixes превращаются в rules, templates, hooks или skills.
+- Stable canon отдельно от volatile work artifacts.
+- Research - reference, не automatic requirement.
 
 ## Maintenance Checklist
 
-Before closing meaningful work in this repo:
+Перед закрытием значимой работы в этом repo:
 
 ```powershell
 npm run check
 git diff --check
 ```
 
-Update memory when project state changes:
+Обновить memory, если состояние проекта изменилось:
 
 - [memory/MEMORY.md](memory/MEMORY.md)
 - [memory/SESSION-HANDOFF.md](memory/SESSION-HANDOFF.md)

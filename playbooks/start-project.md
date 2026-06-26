@@ -1,46 +1,45 @@
-# Start Project
+# Старт Проекта
 
-## When To Use
+## Когда Использовать
 
-Use this when the project is new, vague, or missing its operating skeleton.
+Использовать, когда проект новый, расплывчатый или у него нет operating skeleton.
 
-## Inputs
+## Входные Данные
 
-- product goal
-- constraints
-- expected users
-- initial stack assumptions
+- цель продукта;
+- constraints;
+- ожидаемые пользователи;
+- начальные предположения по stack.
 
-## Outputs
+## Выходы
 
-- canonical `AGENTS.md`
-- starter memory files
-- `develop/README.md`
-- `develop/IMPLEMENTATION_PLAN.md`
-- `develop/LOCAL_RUNBOOK.md`
-- `develop/TODO.md`
-- `develop/CHECKPOINT.md`
-- first stage/checkpoint spec
-- first milestone
-- local backlog seed
-- minimal working directory structure
+- канонический `AGENTS.md`;
+- starter memory files;
+- `develop/README.md`;
+- `develop/IMPLEMENTATION_PLAN.md`;
+- `develop/LOCAL_RUNBOOK.md`;
+- `develop/TODO.md`;
+- `develop/CHECKPOINT.md`;
+- первый stage/checkpoint spec;
+- первый milestone;
+- seed для local backlog;
+- минимальная рабочая структура директорий.
 
-## Steps
+## Шаги
 
-1. Write the project goal in one sentence.
-2. Define what is in scope now and explicitly out of scope.
-3. Create canon files before implementation grows.
-4. Seed `memory/MEMORY.md` with current state, risks, and next steps.
-5. Create `develop/IMPLEMENTATION_PLAN.md` with the first milestone and active checkpoint.
-6. Create `develop/TODO.md` and `develop/CHECKPOINT.md`.
-7. Create the first stage/checkpoint spec under `develop/stages/`.
-8. Define the evidence path under `develop/artifacts/`.
-9. Use GitHub Issues only if the user explicitly wants public/collaborative tracking.
+1. Записать цель проекта одним предложением.
+2. Определить, что входит в scope сейчас, и что явно out of scope.
+3. Создать canon files до того, как implementation разрастется.
+4. Заполнить `memory/MEMORY.md`: current state, risks, next steps.
+5. Создать `develop/IMPLEMENTATION_PLAN.md` с первым milestone и active checkpoint.
+6. Создать `develop/TODO.md` и `develop/CHECKPOINT.md`.
+7. Создать первый stage/checkpoint spec под `develop/stages/`.
+8. Определить evidence path под `develop/artifacts/`.
+9. Использовать GitHub Issues только если пользователь явно хочет публичный или collaborative tracking.
 
-## Definition Of Done
+## Критерий Готовности
 
-- the project can be resumed by another agent with file-based context only
-- the first milestone is clear and testable
-- the first checkpoint has scope, anti-scope, verification, evidence path and stop condition
-- memory and backlog exist
-
+- проект можно продолжить другим агентом только по файловому контексту;
+- первый milestone понятный и проверяемый;
+- первый checkpoint имеет scope, anti-scope, verification, evidence path и stop condition;
+- memory и локальный backlog существуют.

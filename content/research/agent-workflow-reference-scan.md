@@ -1,47 +1,47 @@
 ---
-title: "Agent workflow reference scan"
+title: "Reference scan по agent workflow"
 date: 2026-06-26
-description: "External references for a reusable project operating flow: goal control, wakeups, read coverage, harness gates, skills, memory and GitHub-as-workspace patterns."
+description: "Внешние референсы для переиспользуемого project operating flow: goal control, wakeups, read coverage, harness gates, skills, memory и workspace patterns."
 tags: ["agents", "workflow", "research", "codex", "skills"]
 ---
 
-This is a reference scan, not a product requirement. Links become rules only after the reusable pattern is clear.
+Это reference scan, а не product requirement. Ссылки становятся rules только после того, как переиспользуемый pattern понятен.
 
-## Sources Checked
+## Проверенные Источники
 
-- `ustas-eth/ferrumctl`: small Unix-style tools for Codex workflows. The useful pattern is a composable control plane: goal control, wake/scheduled messages, and read coverage.
-- `affaan-m/ECC`: a large harness system around skills, memory, security, research-first development and hooks. The useful pattern is treating the harness as a durable operating system, not a prompt bag.
-- `svishniakov/agent-flow`: a Codex orchestration and verification framework with project memory, scoped lanes, gates, traces, QA and handoffs. The useful pattern is bounded work with evidence-backed gates.
-- `serejaris/personal-corp-skills`: public Claude/Codex skills and plugin manifests. The useful pattern is packaging repeatable SOPs as skills and keeping plugin manifests public/syncable.
-- `sereja.tech/aicorp`: personal corporation model. The useful pattern is a shared operating space with rules, tasks, skills and history. In this pack, that pattern is adapted to local `develop/TODO.md` and `develop/CHECKPOINT.md` instead of GitHub Issues.
+- `ustas-eth/ferrumctl`: маленькие Unix-style tools для Codex workflows. Полезный pattern - composable control plane: goal control, wake/scheduled messages и read coverage.
+- `affaan-m/ECC`: крупная harness system вокруг skills, memory, security, research-first development и hooks. Полезный pattern - относиться к harness как к durable operating system, а не как к набору prompts.
+- `svishniakov/agent-flow`: framework для Codex orchestration и verification с project memory, scoped lanes, gates, traces, QA и handoffs. Полезный pattern - bounded work с evidence-backed gates.
+- `serejaris/personal-corp-skills`: публичные Claude/Codex skills и plugin manifests. Полезный pattern - упаковывать repeatable SOPs как skills и держать plugin manifests public/syncable.
+- `sereja.tech/aicorp`: personal corporation model. Полезный pattern - общее operating space с rules, tasks, skills и history. В этом pack pattern адаптирован под локальные `develop/TODO.md` и `develop/CHECKPOINT.md` вместо GitHub Issues.
 
-## Extracted Patterns
+## Извлеченные Patterns
 
-1. Separate control plane from implementation.
-   Goal state, wakeups, read coverage, queue status and progress ledgers should be outside the model's memory.
+1. Отделять control plane от implementation.
+   Goal state, wakeups, read coverage, queue status и progress ledgers должны жить вне памяти модели.
 
-2. Use one bounded checkpoint at a time.
-   A task should have scope, anti-scope, checks, evidence path and stop condition before code changes begin.
+2. Работать по одному bounded checkpoint.
+   У задачи должны быть scope, anti-scope, checks, evidence path и stop condition до изменения кода.
 
-3. Keep the patch owner single.
-   Subagents reduce blind spots, but one agent should own final edits unless a stage explicitly grants disjoint write scopes.
+3. Держать одного patch owner.
+   Subagents уменьшают слепые зоны, но один агент должен владеть final edits, если stage явно не выдал disjoint write scopes.
 
-4. Make verification visible.
-   Tests, lint, build, browser screenshots, traces and review notes should land in durable artifacts, not just final chat prose.
+4. Делать verification видимой.
+   Tests, lint, build, browser screenshots, traces и review notes должны попадать в durable artifacts, а не только в финальный ответ в чате.
 
-5. Promote lessons slowly.
-   Research note first, extracted pattern second, playbook/rule/hook/skill only after the pattern is reusable.
+5. Поднимать lessons медленно.
+   Сначала research note, потом extracted pattern, потом playbook/rule/hook/skill, только если pattern reusable.
 
-6. Treat project files as the workspace.
-   Rules, local TODOs, checkpoints, stage plans, evidence, decisions and memory should make progress legible to both humans and agents.
+6. Считать project files рабочим пространством.
+   Rules, local TODOs, checkpoints, stage plans, evidence, decisions и memory должны делать progress понятным и человеку, и агенту.
 
-## Source-of-Truth Implications
+## Последствия Для Source Of Truth
 
-- Starter projects need `develop/` by default, not only `AGENTS.md` and memory templates.
-- Local `develop/TODO.md` and `develop/CHECKPOINT.md` should carry goal, scope, anti-scope, verification and evidence path. GitHub Issues remain optional for public collaboration only.
-- Playbooks need explicit subagent roles and write boundaries.
-- Evidence templates need status values and linked heavy artifacts.
-- Hooks/scripts can later enforce checklist completion, but rules should be clear before enforcement.
+- Starter projects должны получать `develop/` по умолчанию, а не только `AGENTS.md` и memory templates.
+- Local `develop/TODO.md` и `develop/CHECKPOINT.md` должны держать goal, scope, anti-scope, verification и evidence path. GitHub Issues остаются optional только для public collaboration.
+- Playbooks должны явно описывать subagent roles и write boundaries.
+- Evidence templates должны иметь status values и ссылки на heavy artifacts.
+- Hooks/scripts могут позже enforce checklist completion, но правила должны быть ясными до enforcement.
 
 ## References
 

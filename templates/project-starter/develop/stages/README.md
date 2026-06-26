@@ -1,6 +1,6 @@
 # Stage Specs
 
-Create one folder per initiative and one markdown file per stage or checkpoint.
+Создавать одну папку на initiative и один markdown-файл на stage или checkpoint.
 
 ## Checkpoint Spec Template
 
@@ -9,19 +9,19 @@ Create one folder per initiative and one markdown file per stage or checkpoint.
 
 ## Goal
 
-- What outcome should exist after this checkpoint?
+- Какой outcome должен существовать после этого checkpoint?
 
 ## Scope
 
-- Allowed:
+- Разрешено:
 
 ## Anti-Scope
 
-- Not allowed:
+- Не разрешено:
 
 ## Constraints And Invariants
 
-- Must preserve:
+- Сохранить:
 
 ## Inputs To Read
 
@@ -49,7 +49,7 @@ Create one folder per initiative and one markdown file per stage or checkpoint.
 
 ## Stop Condition
 
-- stop when:
+- остановиться когда:
 
 ## Goal Prompt
 

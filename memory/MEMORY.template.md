@@ -8,9 +8,9 @@
 
 ## Current State
 
-- what exists:
-- what works:
-- what is broken or missing:
+- что существует:
+- что работает:
+- что сломано или отсутствует:
 
 ## Active Checkpoint
 
@@ -51,6 +51,5 @@
 ## Useful Commands
 
 ```bash
-# add the commands you actually use
+# добавить команды, которые реально используются
 ```
-

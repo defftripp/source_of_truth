@@ -1,8 +1,8 @@
 # Development Decisions
 
-Use this folder for implementation ADRs that should not be reopened without a new decision.
+Эта папка для implementation ADRs, которые не стоит переоткрывать без нового decision.
 
-Product-level decisions can stay in `docs/DECISIONS.md`.
+Product-level decisions могут оставаться в `docs/DECISIONS.md`.
 
 ## ADR Template
 
@@ -22,4 +22,3 @@ Status: proposed | accepted | superseded
 
 ## Follow-up
 ```
-

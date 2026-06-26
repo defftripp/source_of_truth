@@ -5,15 +5,15 @@ Last updated: YYYY-MM-DD
 
 ## Goal
 
-- What should be true after this checkpoint?
+- Что должно стать правдой после этого checkpoint?
 
 ## Scope
 
-- Allowed:
+- Разрешено:
 
 ## Anti-Scope
 
-- Not allowed:
+- Не разрешено:
 
 ## Inputs To Read
 
@@ -35,7 +35,7 @@ Last updated: YYYY-MM-DD
 
 ## Stop Condition
 
-- stop when:
+- остановиться когда:
 
 ## Goal Prompt
 
@@ -47,4 +47,3 @@ Use subagents read-only unless this checkpoint grants a disjoint write scope.
 Write evidence under develop/artifacts/.
 Stop only when verification passes or an explicit blocker is recorded.
 ```
-

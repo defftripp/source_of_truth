@@ -1,20 +1,19 @@
 # Release
 
-## Goal
+## Цель
 
-Prepare a release that is easy to understand, verify, and roll back.
+Подготовить release, который легко понять, проверить и откатить.
 
-## Steps
+## Шаги
 
-1. Summarize what changed in user terms.
-2. Run final verification or smoke checks.
-3. Record known limitations.
-4. Capture rollback notes if risk is non-trivial.
-5. Update changelog or release notes.
+1. Суммировать изменения в пользовательских терминах.
+2. Запустить final verification или smoke checks.
+3. Записать known limitations.
+4. Зафиксировать rollback notes, если риск нетривиальный.
+5. Обновить changelog или release notes.
 
-## Output
+## Выход
 
-- release summary
-- smoke-check results
-- rollback note
-
+- release summary;
+- smoke-check results;
+- rollback note.

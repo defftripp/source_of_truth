@@ -1,24 +1,23 @@
 # Project Checklist
 
-`AGENTS.md` is the source of truth. This checklist is a thin Claude-specific wrapper around the same project canon.
+`AGENTS.md` - source of truth. Этот checklist - тонкий Claude-specific wrapper вокруг того же project canon.
 
-Use this checklist before and after major changes.
+Использовать перед и после крупных changes.
 
-## Before
+## До Работы
 
-- goal is explicit
-- `AGENTS.md` and relevant project docs were read
-- memory and handoff were checked
-- active stage/checkpoint spec is clear
-- touched areas are known
-- anti-scope is named
-- risks are named
+- goal явный;
+- `AGENTS.md` и relevant project docs прочитаны;
+- memory и handoff проверены;
+- active stage/checkpoint spec понятен;
+- touched areas известны;
+- anti-scope назван;
+- risks названы.
 
-## After
+## После Работы
 
-- verification is done
-- evidence is written for checkpoint-weight work
-- memory updated if needed
-- handoff updated if another session may continue the work
-- next step is clear
-
+- verification выполнена;
+- evidence написано для checkpoint-weight work;
+- memory обновлена, если нужно;
+- handoff обновлен, если другая сессия может продолжить работу;
+- next step понятен.

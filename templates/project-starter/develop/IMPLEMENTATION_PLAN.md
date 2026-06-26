@@ -5,7 +5,7 @@ Last updated: YYYY-MM-DD
 
 ## Project Goal
 
-- fill this in
+- заполнить
 
 ## Active Checkpoint
 
@@ -21,7 +21,7 @@ Last updated: YYYY-MM-DD
 
 | Stage | Goal | Status | Spec | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | First narrow milestone | TODO | `develop/stages/first/STAGE_1_FIRST_MILESTONE.md` | `develop/artifacts/first/checkpoint-1.1.md` |
+| 1 | Первый узкий milestone | TODO | `develop/stages/first/STAGE_1_FIRST_MILESTONE.md` | `develop/artifacts/first/checkpoint-1.1.md` |
 
 ## Backlog
 
@@ -31,9 +31,9 @@ Last updated: YYYY-MM-DD
 
 ## Status Values
 
-- `TODO`: not started.
+- `TODO`: не начато.
 - `IN_PROGRESS`: active checkpoint.
-- `DONE`: accepted and verified.
-- `DONE_WITH_CONCERNS`: usable with named gaps.
+- `DONE`: принято и проверено.
+- `DONE_WITH_CONCERNS`: usable, но есть named gaps.
 - `BLOCKED`: explicit external blocker.
-- `NEEDS_CONTEXT`: user/product decision required.
+- `NEEDS_CONTEXT`: нужен user/product decision.

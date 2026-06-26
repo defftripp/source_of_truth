@@ -2,8 +2,8 @@
 
 ## Session Summary
 
-- what was done:
-- what was verified:
+- что сделано:
+- что проверено:
 
 ## Active Checkpoint
 
@@ -35,4 +35,3 @@ Continue only the active checkpoint unless the user changes scope.
 
 - resume context:
 - warnings:
-

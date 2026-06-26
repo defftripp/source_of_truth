@@ -1,6 +1,6 @@
 # Local Runbook
 
-Record commands that actually work in this project.
+Записывать команды, которые реально работают в этом проекте.
 
 ## Setup
 
@@ -29,11 +29,10 @@ Record commands that actually work in this project.
 ## Artifact Rules
 
 - Durable checkpoint summaries: `develop/artifacts/**`.
-- Bulky screenshots/traces/logs: `output/**` or `work/**`, linked from summaries.
-- Do not commit secrets, signed URLs, raw provider payloads, payment data, private customer data, or local machine credentials.
+- Bulky screenshots/traces/logs: `output/**` или `work/**`, с ссылкой из summary.
+- Не commit secrets, signed URLs, raw provider payloads, payment data, private customer data или local machine credentials.
 
 ## Known Local Blockers
 
 - blocker:
 - workaround:
-

@@ -8,4 +8,3 @@
 - alternatives considered:
 - why this choice won:
 - follow-up:
-

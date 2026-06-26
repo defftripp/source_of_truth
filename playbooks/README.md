@@ -1,15 +1,14 @@
 # Playbooks
 
-Playbooks are short operational guides for recurring project workflows.
+Playbooks - короткие рабочие инструкции для повторяющихся проектных ситуаций.
 
-Use them as the first layer after `AGENTS.md`:
+Их читают сразу после `AGENTS.md`:
 
-- `start-project.md`: bootstrap a new project
-- `continue-project.md`: recover context and continue existing work
-- `project-operating-flow.md`: run bounded checkpoint work with subagents, gates and evidence
-- `feature.md`: implement a new feature safely
-- `bugfix.md`: fix a bug and leave behind a regression barrier
-- `refactor.md`: change structure without breaking behavior
-- `release.md`: prepare and publish a release
-- `project-audit.md`: inspect the project for missing foundations
-
+- `start-project.md`: старт нового проекта и создание operating skeleton.
+- `continue-project.md`: быстро восстановить контекст и продолжить работу.
+- `project-operating-flow.md`: вести ограниченный checkpoint через subagents, gates и evidence.
+- `feature.md`: безопасно добавить новую возможность.
+- `bugfix.md`: исправить баг и оставить regression barrier.
+- `refactor.md`: изменить структуру без смены поведения.
+- `release.md`: подготовить и выпустить release.
+- `project-audit.md`: найти недостающие основы проекта.

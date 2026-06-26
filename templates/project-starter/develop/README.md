@@ -1,12 +1,12 @@
 # Development Playbook
 
-This directory defines how implementation work is planned, executed, verified, and handed off.
+Эта директория определяет, как implementation work планируется, выполняется, проверяется и передается дальше.
 
-Product truth lives in `docs/**`.
-Session memory lives in `memory/**`.
-Short-lived tool plans may live in tool-specific folders, but durable checkpoint specs and evidence live here.
+Product truth живет в `docs/**`.
+Session memory живет в `memory/**`.
+Короткоживущие tool plans могут жить в tool-specific папках, но durable checkpoint specs и evidence живут здесь.
 
-## Structure
+## Структура
 
 ```text
 develop/
@@ -26,12 +26,12 @@ develop/
     ADR-0001-<decision>.md
 ```
 
-## Reading Order Before Stage Work
+## Порядок Чтения Перед Stage Work
 
 1. `AGENTS.md`
 2. `memory/MEMORY.md`
 3. `memory/SESSION-HANDOFF.md`
-4. relevant product docs under `docs/**`
+4. relevant product docs под `docs/**`
 5. `develop/README.md`
 6. `develop/IMPLEMENTATION_PLAN.md`
 7. `develop/TODO.md`
@@ -43,16 +43,16 @@ develop/
 
 ## Agent Operating Model
 
-One main agent owns final edits. Subagents are read-only by default.
+Один main agent владеет итоговыми правками. Subagents read-only по умолчанию.
 
-| Role | Task | May edit files |
+| Роль | Задача | Может редактировать |
 | --- | --- | --- |
-| `explorer` | Find affected files, local patterns and risks. | No |
-| `docs-researcher` | Verify official docs or version-sensitive facts. | No |
-| `reviewer` | Find bugs, scope drift, secret leaks and missing gates. | No |
-| `test-auditor` | Find missing or weak acceptance coverage. | No |
-| `browser-debug` | Run UI checks, screenshots, traces and visual evidence. | No |
-| `worker` | Implement a narrow disjoint scope. | Yes, only when assigned |
+| `explorer` | Найти affected files, local patterns и risks. | Нет |
+| `docs-researcher` | Проверить official docs или version-sensitive facts. | Нет |
+| `reviewer` | Найти bugs, scope drift, secret leaks и missing gates. | Нет |
+| `test-auditor` | Найти missing or weak acceptance coverage. | Нет |
+| `browser-debug` | Запустить UI checks, screenshots, traces и visual evidence. | Нет |
+| `worker` | Реализовать narrow disjoint scope. | Да, только если назначен |
 
 ## Goal Prompt Template
 
@@ -69,7 +69,7 @@ Stop only when the checkpoint is complete with verification evidence, or when bl
 
 ## Evidence Format
 
-Each completed checkpoint should write a markdown artifact with:
+Каждый завершенный checkpoint пишет markdown artifact:
 
 ```text
 Checkpoint:

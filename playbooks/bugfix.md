@@ -1,26 +1,25 @@
 # Bugfix
 
-## Goal
+## Цель
 
-Fix the defect and leave behind a regression barrier.
+Исправить дефект и оставить regression barrier.
 
-## Steps
+## Шаги
 
-1. Reproduce the bug.
-2. Write down expected vs actual behavior.
-3. Isolate the smallest responsible area.
-4. Add or describe a regression check.
-5. Apply the fix.
-6. Run the regression check and any adjacent gate needed by the touched layer.
-7. Write evidence when the bug has checkpoint weight.
-8. If the bug reveals a recurring pattern, promote it into a rule or checklist.
+1. Воспроизвести баг.
+2. Записать expected vs actual behavior.
+3. Изолировать smallest responsible area.
+4. Добавить или описать regression check.
+5. Внести fix.
+6. Запустить regression check и соседний gate, который нужен затронутому слою.
+7. Записать evidence, если баг имеет checkpoint weight.
+8. Если баг показывает повторяющийся pattern, поднять его в rule или checklist.
 
-## Output
+## Выход
 
-- root cause
-- applied fix
-- regression barrier
-- verification result
-- evidence path, if written
-- optional new rule if the lesson generalizes
-
+- root cause;
+- applied fix;
+- regression barrier;
+- verification result;
+- evidence path, если написан;
+- optional new rule, если lesson обобщается.
