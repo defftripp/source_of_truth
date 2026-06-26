@@ -22,6 +22,26 @@ Immediate migration:
 
 Status: accepted.
 
+## 2026-06-26 - Personal Codex stack остается lean и registry-driven
+
+Decision:
+
+- Держать личную настройку Codex как слоеную систему, а не как один большой файл правил.
+- Использовать `AGENTS.override.md` для короткого глобального стиля: русский язык, прямой тон, KISS, no overcoding, безопасность и базовый workflow.
+- Держать глобальный `AGENTS.md` тонким routing layer, без Installed Skill Map и без длинных каталогов skills.
+- Считать live skill registry Codex актуальной картой доступных skills; подробный workflow должен жить в конкретном `SKILL.md` и читаться только при применении skill.
+- Держать MCP как малый allow-list внешних инструментов: Lazyweb для product UI, Context7 для актуальных docs, browser/runtime tooling для проверки. GitHub MCP, Serena и другие серверы добавлять только после явной пользы.
+- Удалять или отключать шумные skills, если они дублируют registry, протухли или провоцируют overcoding.
+
+Rationale:
+
+- Большой глобальный `AGENTS.md` быстро превращается в мусорный контекст и конкурирует с живым registry.
+- Codex лучше работает, когда стиль и границы короткие, а тяжелые процедуры подгружаются по требованию.
+- Малый MCP-слой проще отлаживать, безопаснее для секретов и меньше раздувает стартовый контекст.
+- Личный workflow должен быть воспроизводимым: backup перед правками, секреты вне shared config, периодический audit skills/config.
+
+Status: accepted.
+
 ## 2026-06-26 - Starter projects получают checkpoint operating flow
 
 Decision:
