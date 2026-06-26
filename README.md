@@ -6,14 +6,17 @@
 
 Workflow здесь local-first. GitHub нужен как понятная витрина репозитория, а не как обязательный таск-трекер. Ежедневная работа живет в локальных файлах под `develop/`, а не в GitHub Issues.
 
+Личный Codex stack тоже часть канона. Глобальные правила должны быть короткими, live skill registry остается источником правды по skills, `SKILL.md` читается по требованию, а MCP держится маленьким allow-list: Lazyweb для product UI, Context7 для актуальных docs, browser/runtime tools для проверки.
+
 ## Что Это
 
-У `source_of_truth` две роли:
+У `source_of_truth` три роли:
 
 | Слой | Назначение | Основные пути |
 | --- | --- | --- |
 | Публичный сайт | Блог, playbook-страницы, research notes и reusable prompts | `content/`, `layouts/`, `static/` |
 | Starter kit | Project-local правила агентов, память, stages, evidence, templates и hooks | `templates/project-starter/`, `AGENTS.md`, `playbooks/`, `rules/`, `memory/` |
+| Personal Codex stack | Личный operating layer для Codex: стиль, skills, MCP, cleanup и no overcoding | `content/playbook/personal-codex-stack.md`, `docs/DECISIONS.md` |
 
 Это не продуктовый репозиторий. Правда конкретного продукта должна жить в его репозитории. Здесь лежит переиспользуемая операционная система работы.
 
@@ -41,6 +44,14 @@ flowchart TD
 ```text
 intake -> TODO -> CHECKPOINT -> goal -> patch -> checks -> evidence -> memory -> lesson
 ```
+
+Для больших multi-surface задач этот flow расширяется до orchestrator checkpoint workflow:
+
+```text
+orchestrator -> inventory -> checkpoint registry -> small batches -> bounded subagents -> durable summaries -> synthesis stage
+```
+
+Использовать его, когда задача покрывает много ролей, вкладок, экранов, модулей или states, а один монолитный `/goal` рискует потерять контекст. Подробный playbook: [playbooks/orchestrator-checkpoint-workflow.md](playbooks/orchestrator-checkpoint-workflow.md).
 
 ## Быстрый Старт
 
@@ -79,7 +90,9 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 Для человека:
 
 - [AGENTS.md](AGENTS.md) - главный operating guide.
+- [content/playbook/personal-codex-stack.md](content/playbook/personal-codex-stack.md) - как держать личный Codex быстрым, точным и без мусорного контекста.
 - [playbooks/project-operating-flow.md](playbooks/project-operating-flow.md) - основной checkpoint workflow.
+- [playbooks/orchestrator-checkpoint-workflow.md](playbooks/orchestrator-checkpoint-workflow.md) - workflow для больших задач через orchestrator, registry и bounded subagents.
 - [templates/project-starter/README.md](templates/project-starter/README.md) - что попадает в новый проект.
 - [docs/DECISIONS.md](docs/DECISIONS.md) - durable decisions по этому репозиторию.
 
@@ -155,7 +168,7 @@ project/
 | Feature | checkpoint spec | scope, anti-scope, checks, stop condition |
 | Bug | expected-vs-actual и regression barrier | fix плюс proof |
 | Research link или repo | research note | pattern extraction перед rule changes |
-| Tool adoption | capability plan | rollback и access boundary |
+| Tool adoption | capability plan плюс проверка personal Codex stack | rollback и access boundary |
 | Публичная статья | draft под `content/` | без private project data |
 
 ## Локальная Очередь
@@ -174,6 +187,8 @@ GitHub Issues использовать только когда явно нужн
 ## Роли Агентов
 
 Один главный агент владеет итоговыми правками. Subagents read-only, если checkpoint явно не выдал narrow disjoint write scope.
+
+Для больших задач текущий основной чат становится `orchestrator`: он держит scope, Browser/session state, checkpoint registry, durable summaries и финальный synthesis. Subagents получают только bounded checkpoint, а не весь проектный контекст.
 
 | Роль | Зачем нужна |
 | --- | --- |
