@@ -15,6 +15,7 @@ tags: ["codex", "skills", "mcp", "workflow", "agents"]
 ```text
 Global rules = короткий стиль и границы.
 Skill registry = актуальная карта процедур.
+Capability registry = маленький список must-have skills/MCP/plugins.
 SKILL.md = подробный workflow по требованию.
 MCP = внешний инструмент, а не постоянный контекст.
 Project AGENTS.md = правда конкретного проекта.
@@ -67,6 +68,16 @@ Project AGENTS.md = правда конкретного проекта.
 
 Ручной skill map - антипаттерн. Codex уже видит live skill registry при старте.
 Если продублировать его в `AGENTS.md`, файл быстро станет ложной картой.
+
+Допустимый компромисс - compact capability registry, а не полный каталог:
+
+```text
+registries/capabilities.json
+registries/capabilities.md
+registries/codex-global.json
+```
+
+Там фиксируется только must-have слой: Superpowers, Lazyweb, Context7, Browser/Chrome/Playwright, system skills, personal helper skills и security baseline.
 
 Минимальный routing block лучше:
 
@@ -208,6 +219,18 @@ metadata из чата.
 5. Как откатить, если стало хуже?
 
 Если ответов нет, это research note, а не новая настройка.
+
+Перед изменением глобального Codex setup сначала запускать read-only audit:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\audit_codex_capabilities.ps1
+```
+
+Запись в `~/.codex` разрешена только после явной фразы:
+
+```text
+разрешаю обновить глобалку Codex
+```
 
 ## Секреты
 

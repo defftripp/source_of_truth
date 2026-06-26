@@ -22,6 +22,42 @@ Immediate migration:
 
 Status: accepted.
 
+## 2026-06-26 - Onboarding skill становится исполняемым мозгом процесса
+
+Decision:
+
+- Добавить repo-owned skill `skills/source-of-truth-onboarding/SKILL.md`.
+- Держать deterministic actions в scripts: `install_codex_skill.ps1` и `audit_project_readiness.ps1`.
+- Расширить starter template до полного readiness layer: product direction, architecture, skills registry, rules, hooks, agents README, questions и lessons.
+- Сделать source skill active capability, а глобальную installed copy оставить user-gated recommended capability.
+- Синхронизировать сам `source_of_truth` с этим каноном через root `docs/`, `develop/`, `memory/`, rules и hooks.
+
+Rationale:
+
+- Пользователь хочет не блог, а автоматизируемый процесс: skill как мозг, scripts/templates как руки.
+- Глобальная установка полезна, но запись в `~/.codex` остается high-trust operation и требует explicit approval.
+- Readiness gate должен проверять не только PRD, но и правила общения, skills, hooks, memory и первый checkpoint.
+
+Status: accepted.
+
+## 2026-06-26 - External capabilities живут в registry, а не в глобальном AGENTS
+
+Decision:
+
+- Добавить `registries/capabilities.json`, `registries/capabilities.md` и `registries/codex-global.json`.
+- Считать Superpowers, Lazyweb, Context7, Browser/Chrome/Playwright, system skills, personal helper skills и security baseline частью Codex operating layer.
+- Не вставлять полный installed skill catalog в глобальный `AGENTS.md` или `AGENTS.override.md`.
+- Проверять skills/MCP/plugins read-only audit script перед предложением global changes.
+- Разрешать запись в `~/.codex` только после явной фразы пользователя `разрешаю обновить глобалку Codex`, с backup и evidence.
+
+Rationale:
+
+- Глобальные правила должны оставаться компактными.
+- Must-have capabilities нужны агенту для зрелого flow, но их список должен быть проверяемым и машинно-читаемым.
+- Global Codex setup содержит runtime state и потенциально чувствительные данные, поэтому default mode должен быть audit/proposed diff, а не silent write.
+
+Status: accepted.
+
 ## 2026-06-26 - Personal Codex stack остается lean и registry-driven
 
 Decision:

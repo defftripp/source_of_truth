@@ -29,22 +29,65 @@ skill = brain
 scripts/templates = hands
 ```
 
-Canonical source lives in this repo. Installed runtime copy lives in Codex:
+Canonical source lives in this repo. Optional installed runtime copy lives in Codex after explicit approval:
 
 ```text
 repo:
   skills/source-of-truth-onboarding/SKILL.md
   scripts/install_codex_skill.ps1
   scripts/audit_project_readiness.ps1
+  registries/capabilities.json
+  registries/codex-global.json
   templates/project-starter/**
   rules/skill-installation.mdc
-  playbooks/source-of-truth-onboarding.md
+  rules/codex-global-editing.mdc
+  hooks/pre-implementation-check.md
 
-installed:
+installed after approval:
   ~/.codex/skills/source-of-truth-onboarding/SKILL.md
 ```
 
 Version 1 supports Codex only. Cursor, Claude and other agent hosts are out of scope for the first implementation, except for thin wrappers already present in the starter template.
+
+## Required External Capabilities
+
+The onboarding skill must use a capability registry instead of hardcoding the full installed skill catalog into global rules.
+
+Canonical files:
+
+```text
+registries/capabilities.json
+registries/capabilities.md
+registries/codex-global.json
+```
+
+The first required set:
+
+- Superpowers plugin skills: `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`;
+- Lazyweb skills and MCP for product UI evidence;
+- Context7 MCP for current library/framework/API docs;
+- Browser, Chrome and Playwright for real UI verification;
+- system skills: `skill-installer`, `skill-creator`, `openai-docs`, `imagegen`;
+- personal helpers: `caveman`, `find-skills`, `load-project-rules`, `zip-context`;
+- security baseline skills as recommended capabilities.
+
+Missing required capability behavior:
+
+```text
+Capability missing -> record impact -> BLOCKED or DEGRADED -> propose install/update -> no fake usage.
+```
+
+Global Codex writes must follow:
+
+```text
+audit -> proposed diff -> explicit approval -> backup -> scoped write -> verify -> evidence
+```
+
+The approval phrase for writing to `~/.codex` is:
+
+```text
+разрешаю обновить глобалку Codex
+```
 
 ## Install And Update Policy
 
@@ -63,6 +106,7 @@ Self-install rules:
 - target only `~/.codex/skills/source-of-truth-onboarding/`;
 - back up an existing installed copy before overwriting it;
 - do not edit unrelated skills or global Codex config;
+- do not edit global Codex files without the explicit approval phrase;
 - write install evidence under the target project or this repo, depending on where the action was requested;
 - record version, source path, target path and result.
 
@@ -333,6 +377,7 @@ Evidence must include:
 Minimum verification for the skill implementation:
 
 - install script smoke test into a temporary Codex skills directory;
+- capability audit script smoke test against the current Codex home;
 - bootstrap script smoke test into a temporary project;
 - readiness audit against an empty project;
 - readiness audit against an already structured project;
@@ -353,6 +398,7 @@ Minimum verification for the skill implementation:
 The design is implemented when:
 
 - canonical onboarding skill source exists in this repo;
+- capability registry exists and covers required external skills, MCP and plugins;
 - Codex install/update script exists and backs up old copies;
 - install/update rule exists;
 - readiness audit script exists;

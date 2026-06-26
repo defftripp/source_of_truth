@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "updated": "2026-06-26",
+  "purpose": "Expected global Codex contour for this source_of_truth pack.",
+  "write_policy": {
+    "mode": "propose_diff_only",
+    "approval_phrase": "разрешаю обновить глобалку Codex",
+    "backup_required": true,
+    "evidence_required": true,
+    "forbidden": [
+      "Do not edit auth.json, session files, sqlite logs, credentials, or unrelated skill folders.",
+      "Do not install broad MCP/plugin sets without explicit task value.",
+      "Do not paste full installed skill maps into AGENTS.md or AGENTS.override.md."
+    ]
+  },
+  "global_files": [
+    {
+      "path": "~/.codex/AGENTS.override.md",
+      "role": "compact global rule layer",
+      "expected": "Russian by default, terse style, KISS, no overcoding, skill routing via live registry, safe global edits."
+    },
+    {
+      "path": "~/.codex/AGENTS.md",
+      "role": "legacy or broader global instructions",
+      "expected": "May exist, but should not compete with project-local AGENTS.md or duplicate huge skill catalogs."
+    },
+    {
+      "path": "~/.codex/config.toml",
+      "role": "Codex config, plugins and MCP servers",
+      "expected": "Contains only useful MCP/plugin entries and no committed secrets."
+    }
+  ],
+  "required_mcp_servers": [
+    "context7",
+    "lazyweb"
+  ],
+  "recommended_mcp_servers": [
+    "node_repl"
+  ],
+  "required_plugins": [
+    "superpowers@openai-curated",
+    "browser@openai-bundled",
+    "chrome@openai-bundled"
+  ],
+  "task_required_plugins": [
+    "computer-use@openai-bundled",
+    "documents@openai-primary-runtime",
+    "pdf@openai-primary-runtime",
+    "spreadsheets@openai-primary-runtime",
+    "presentations@openai-primary-runtime",
+    "figma@openai-curated",
+    "canva@openai-curated",
+    "creative-production@openai-curated-remote"
+  ],
+  "notes": [
+    "Global Codex files are runtime configuration, not the public source of truth.",
+    "This repository should generate proposals and audit reports before any global write.",
+    "Global edits require explicit user approval and backup."
+  ]
+}

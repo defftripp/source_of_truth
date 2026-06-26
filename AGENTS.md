@@ -25,7 +25,17 @@
 - `content/` для public site material
 - `memory/MEMORY.md`
 - `memory/SESSION-HANDOFF.md`
+- `memory/QUESTIONS.md`
+- `memory/LESSONS.md`
 - `docs/DECISIONS.md` или эквивалент ADR
+- `docs/PRODUCT_DIRECTION.md` или `docs/PRD.md`
+- `docs/ARCHITECTURE.md`
+- `docs/SKILLS.md` или `develop/SKILL_REGISTRY.md`
+- `registries/` для required/recommended skills, MCP, plugins и global Codex contour
+- `rules/` для reusable agent/process rules
+- `hooks/` для session/checkpoint prompt hooks
+- `agents/README.md` для role contracts
+- `playbooks/` для повторяемых workflow
 - `develop/README.md`
 - `develop/IMPLEMENTATION_PLAN.md`
 - `develop/LOCAL_RUNBOOK.md`
@@ -63,6 +73,7 @@ local intake
 - Feature/enhancement: определить user-visible outcome, scope, anti-scope, checks, stop condition и checkpoint evidence path.
 - Bug: воспроизвести или описать expected vs actual behavior, добавить или назвать regression barrier, потом patch.
 - Research/tool/reference link: сначала `content/research/`, потом extracted patterns, и только после этого rules/playbooks.
+- Skills/MCP/global Codex setup: сначала `registries/` и read-only audit, потом proposed diff, и только после явного разрешения global write.
 - Blog/public content: не переносить private project data, если это явно не safe case study.
 - Local queue - default. Не требовать GitHub Issues или Projects, если пользователь явно не попросил.
 
@@ -88,12 +99,13 @@ local intake
 
 1. Прочитать project goal, `AGENTS.md` и current memory.
 2. Выбрать matching playbook из `playbooks/`.
-3. Для нетривиальной работы создать или обновить active plan/checkpoint spec.
-4. Сделать самый маленький useful change, который двигает проект.
-5. Запустить relevant verification gate или записать explicit blocker.
-6. Написать evidence для checkpoint-weight work.
-7. Обновить memory, если изменились assumptions, decisions или next steps.
-8. Если bug выявил pattern, поднять lesson в rule или checklist.
+3. Проверить `registries/`, если задача зависит от skills, MCP, plugins или global Codex setup.
+4. Для нетривиальной работы создать или обновить active plan/checkpoint spec.
+5. Сделать самый маленький useful change, который двигает проект.
+6. Запустить relevant verification gate или записать explicit blocker.
+7. Написать evidence для checkpoint-weight work.
+8. Обновить memory, если изменились assumptions, decisions или next steps.
+9. Если bug выявил pattern, поднять lesson в rule или checklist.
 
 ## Publishing Protocol
 
@@ -107,8 +119,10 @@ local intake
 
 1. Уточнить scope, constraints и definition of done.
 2. Создать canon files до большой implementation.
-3. Создать первый milestone с narrow, testable outcome.
-4. Подготовить memory и local task tracking до parallel work.
+3. Создать product direction/PRD, architecture и skills registry.
+4. Создать первый milestone с narrow, testable outcome.
+5. Подготовить memory, questions, lessons и local task tracking до parallel work.
+6. Пройти pre-implementation check или записать blocker.
 
 ## Maintenance Protocol
 
@@ -124,5 +138,6 @@ local intake
 - next steps понятны;
 - memory обновлена, если project context изменился;
 - новые reusable lessons подняты в `rules/`, `hooks/` или `playbooks/`;
+- required capabilities проверены или missing capability записан как blocker/degraded mode;
 - public site content лежит в правильном `content/*` section, если task publishable.
 

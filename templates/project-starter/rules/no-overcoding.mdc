@@ -1,0 +1,12 @@
+---
+description: Keep project changes scoped, direct and free of unnecessary abstractions
+alwaysApply: true
+---
+
+# No Overcoding
+
+- Choose the smallest direct change that moves the checkpoint.
+- Do not add dependencies or abstractions unless they remove real repeated pain.
+- Do not create project-specific skills for one-off tasks.
+- Do not rewrite unrelated areas to make a checkpoint pass.
+- Keep rules concise; heavy workflows belong in playbooks or skills.

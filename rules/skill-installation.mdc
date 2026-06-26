@@ -1,0 +1,79 @@
+---
+description: Required, recommended and task-required capability policy for skills, MCP servers and plugins
+alwaysApply: true
+---
+
+# Skill And Capability Installation
+
+The source of truth for must-have capabilities is:
+
+```text
+registries/capabilities.json
+registries/capabilities.md
+registries/codex-global.json
+```
+
+## Capability Tiers
+
+Use three levels:
+
+- `required`: needed for full source-of-truth operating flow.
+- `recommended`: useful default; missing item is a risk, not a universal blocker.
+- `task_required`: required only when the active task matches that domain.
+
+## Required Behavior
+
+When a required capability is missing:
+
+1. Name it.
+2. Explain the impact.
+3. Mark the matching workflow as `BLOCKED` or `DEGRADED`.
+4. Offer install/update only through the safe global edit flow.
+5. Do not pretend the capability was used.
+
+## Recommended Behavior
+
+When a recommended capability is missing:
+
+1. Record it as a warning.
+2. Continue unrelated work.
+3. Suggest install/update only when it would materially improve the current task.
+
+## Task-Required Behavior
+
+When a task-required capability is missing:
+
+1. Block only the matching task branch.
+2. Offer a degraded alternative if the evidence quality remains honest.
+3. Do not install unrelated capabilities.
+
+## Install Policy
+
+Repo-owned skills may be installed from this repository when the user explicitly asks or when the onboarding flow requires them.
+
+External skills should not be installed blindly. First:
+
+- inspect source and `SKILL.md`;
+- confirm task value;
+- check for overlap with existing installed skills;
+- confirm whether it should be global or project-local;
+- use backup and evidence for global changes.
+
+## No Global Skill Map
+
+Do not paste the full installed skill catalog into global `AGENTS.md` or `AGENTS.override.md`.
+
+Use:
+
+- live Codex skill registry at startup;
+- compact routing preferences in global rules;
+- `registries/capabilities.json` for required/recommended capabilities;
+- project-local `docs/SKILLS.md` or `develop/SKILL_REGISTRY.md` for project-specific skills.
+
+## Audit Command
+
+Use the read-only audit before proposing global changes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\audit_codex_capabilities.ps1
+```

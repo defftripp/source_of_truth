@@ -1,0 +1,21 @@
+---
+description: Project policy for required, recommended and task-required skills, MCP servers and plugins
+alwaysApply: true
+---
+
+# Skill And Capability Installation
+
+Use `docs/SKILLS.md` for project-specific skill routing.
+
+## Policy
+
+- Required capabilities block or degrade the matching workflow when missing.
+- Recommended capabilities warn but do not block unrelated work.
+- Task-required capabilities block only the matching task branch.
+- Do not install broad MCP/plugin sets just because they are popular.
+- Do not edit global Codex files without explicit approval and backup.
+- Do not paste the full live skill catalog into project docs.
+
+## Global Write Gate
+
+Real `~/.codex` writes require explicit user approval and evidence.

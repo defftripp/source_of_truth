@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "hugo server -D",
     "build": "hugo --gc --minify",
-    "check": "hugo --gc --minify"
+    "check": "hugo --gc --minify",
+    "audit:capabilities": "powershell -ExecutionPolicy Bypass -File scripts/audit_codex_capabilities.ps1",
+    "audit:readiness": "powershell -ExecutionPolicy Bypass -File scripts/audit_project_readiness.ps1 -TargetPath .",
+    "install:onboarding-skill:whatif": "powershell -ExecutionPolicy Bypass -File scripts/install_codex_skill.ps1 -SkillName source-of-truth-onboarding -WhatIfOnly"
   },
   "devDependencies": {
     "hugo-extended": "^0.163.2"

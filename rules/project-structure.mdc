@@ -1,0 +1,33 @@
+---
+description: Source-of-truth project structure, durable docs, volatile work and generated artifacts
+alwaysApply: true
+---
+
+# Project Structure
+
+Use the same structure in every governed project unless the local `AGENTS.md` records an explicit exception.
+
+## Canonical Folders
+
+- `docs/`: durable product, architecture, decisions and skill registry.
+- `develop/`: implementation plan, active checkpoint, local runbook, stages and evidence.
+- `memory/`: current state, handoff, open questions and reusable lessons.
+- `rules/`: concise reusable project rules.
+- `hooks/`: prompt/checklist hooks that enforce the canon.
+- `agents/`: role contracts for specialist agents.
+- `work/`: volatile local artifacts.
+- `archive/`: closed or stale artifacts outside the hot path.
+
+## Boundaries
+
+- Do not treat generated folders such as `public/`, `dist/`, `build/`, `coverage/` or `resources/_gen/` as source of truth.
+- Do not store secrets, raw provider payloads, payment data or private customer data in docs, memory or evidence.
+- Keep heavy logs, traces and screenshots under `output/` or `work/` and link them from markdown evidence.
+- Preserve existing project-specific structure. Add the canon as an operating layer, not as a broad rewrite.
+
+## Required Before Implementation
+
+- Product direction or PRD exists.
+- Architecture boundaries exist.
+- Active checkpoint exists with scope, anti-scope, verification, evidence path and stop condition.
+- Blocking questions are closed or the task is marked `NEEDS_CONTEXT` / `BLOCKED`.

@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "updated": "2026-06-26",
+  "purpose": "Required and recommended Codex capabilities for the source_of_truth operating system.",
+  "tiers": {
+    "required": "Needed for full source_of_truth onboarding and normal project operating flow.",
+    "recommended": "Strong default. Missing capability should be reported, but does not block unrelated work.",
+    "task_required": "Required only when the active task matches this capability's domain."
+  },
+  "policies": {
+    "global_write_mode": "propose_diff_only",
+    "global_write_approval_phrase": "разрешаю обновить глобалку Codex",
+    "skill_catalog_policy": "Do not paste full installed skill maps into global AGENTS files. Use live registry plus this compact capability registry.",
+    "missing_required_behavior": "Report BLOCKED or DEGRADED mode and do not pretend the capability is available."
+  },
+  "capabilities": [
+    {
+      "id": "source-of-truth-onboarding",
+      "label": "Source-of-Truth Onboarding",
+      "tier": "required",
+      "type": "repo_skill",
+      "lifecycle": "active",
+      "reason": "Builds or repairs the full project operating layer before implementation.",
+      "degraded_mode": "Manual onboarding falls back to playbooks/templates if the repo skill source is missing.",
+      "checks": [
+        {
+          "kind": "repo_path",
+          "path": "skills/source-of-truth-onboarding/SKILL.md"
+        }
+      ]
+    },
+    {
+      "id": "source-of-truth-onboarding-installed",
+      "label": "Source-of-Truth Onboarding Installed Copy",
+      "tier": "recommended",
+      "type": "installed_skill",
+      "lifecycle": "user_gated",
+      "reason": "Global Codex install lets the onboarding skill trigger outside this repo, but real global writes require explicit approval.",
+      "degraded_mode": "Use the repo-local skill source and scripts directly until global install is approved.",
+      "checks": [
+        {
+          "kind": "installed_skill",
+          "name": "source-of-truth-onboarding"
+        }
+      ]
+    },
+    {
+      "id": "superpowers",
+      "label": "Superpowers Workflow Pack",
+      "tier": "required",
+      "type": "plugin",
+      "lifecycle": "active",
+      "reason": "Provides mature brainstorming, planning, TDD, debugging, verification and review workflows.",
+      "degraded_mode": "Design and plan gates must fall back to local source_of_truth playbooks.",
+      "checks": [
+        {
+          "kind": "plugin_config",
+          "name": "superpowers@openai-curated"
+        }
+      ],
+      "expected_skills": [
+        "superpowers:brainstorming",
+        "superpowers:writing-plans",
+        "superpowers:test-driven-development",
+        "superpowers:systematic-debugging",
+        "superpowers:verification-before-completion",
+        "superpowers:requesting-code-review"
+      ]
+    },
+    {
+      "id": "lazyweb",
+      "label": "Lazyweb Product UI Evidence",
+      "tier": "required",
+      "type": "skill_and_mcp",
+      "lifecycle": "active",
+      "reason": "Product UI work must use real UI examples and Lazyweb evidence before design changes.",
+      "degraded_mode": "Product UI recommendations are blocked or marked degraded until Lazyweb is fixed.",
+      "checks": [
+        {
+          "kind": "skill_dir",
+          "name": "lazyweb"
+        },
+        {
+          "kind": "mcp_server",
+          "name": "lazyweb"
+        }
+      ],
+      "expected_skills": [
+        "lazyweb",
+        "lazyweb-design",
+        "lazyweb-quick-search",
+        "lazyweb-ab-test-research",
+        "lazyweb-update"
+      ]
+    },
+    {
+      "id": "context7",
+      "label": "Context7 Current Docs",
+      "tier": "required",
+      "type": "mcp",
+      "lifecycle": "active",
+      "reason": "Current library, framework, SDK, API and cloud documentation must come from live docs.",
+      "degraded_mode": "Version-sensitive technical guidance is blocked until official docs are checked another way.",
+      "checks": [
+        {
+          "kind": "mcp_server",
+          "name": "context7"
+        }
+      ]
+    },
+    {
+      "id": "browser-chrome-playwright",
+      "label": "Browser Verification Stack",
+      "tier": "required",
+      "type": "plugin_and_skill",
+      "lifecycle": "active",
+      "reason": "Visible UI behavior must be verified in a real browser when a runnable UI exists.",
+      "degraded_mode": "UI claims require explicit degraded evidence and cannot rely on source reading alone.",
+      "checks": [
+        {
+          "kind": "plugin_config",
+          "name": "browser@openai-bundled"
+        },
+        {
+          "kind": "plugin_config",
+          "name": "chrome@openai-bundled"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "playwright"
+        }
+      ],
+      "expected_skills": [
+        "playwright",
+        "playwright-interactive"
+      ]
+    },
+    {
+      "id": "system-skills",
+      "label": "Codex System Skills",
+      "tier": "required",
+      "type": "system_skills",
+      "lifecycle": "active",
+      "reason": "Core installation, creation, OpenAI docs and image generation workflows.",
+      "degraded_mode": "Skill install/create and OpenAI-specific workflows require manual fallback.",
+      "checks": [
+        {
+          "kind": "system_skill",
+          "name": "skill-installer"
+        },
+        {
+          "kind": "system_skill",
+          "name": "skill-creator"
+        },
+        {
+          "kind": "system_skill",
+          "name": "openai-docs"
+        },
+        {
+          "kind": "system_skill",
+          "name": "imagegen"
+        }
+      ],
+      "expected_skills": [
+        "skill-installer",
+        "skill-creator",
+        "openai-docs",
+        "imagegen"
+      ]
+    },
+    {
+      "id": "personal-style-and-rules",
+      "label": "Personal Style And Rules Helpers",
+      "tier": "required",
+      "type": "local_skills",
+      "lifecycle": "active",
+      "reason": "Preserves the user's terse style, rules loading flow, skill discovery and context packaging.",
+      "degraded_mode": "Work continues, but style/rules sync/context packaging must be done manually.",
+      "checks": [
+        {
+          "kind": "agent_skill",
+          "name": "caveman"
+        },
+        {
+          "kind": "agent_skill",
+          "name": "find-skills"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "load-project-rules"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "zip-context"
+        }
+      ],
+      "expected_skills": [
+        "caveman",
+        "caveman-review",
+        "caveman-commit",
+        "find-skills",
+        "load-project-rules",
+        "zip-context"
+      ]
+    },
+    {
+      "id": "security-baseline",
+      "label": "Security Baseline",
+      "tier": "recommended",
+      "type": "local_skills",
+      "lifecycle": "active",
+      "reason": "Auth, payments, permissions, secrets and provider integrations need explicit security review paths.",
+      "degraded_mode": "Security-heavy work must be marked degraded or use manual review.",
+      "checks": [
+        {
+          "kind": "skill_dir",
+          "name": "security-best-practices"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "security-threat-model"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "security-ownership-map"
+        }
+      ],
+      "expected_skills": [
+        "security-best-practices",
+        "security-threat-model",
+        "security-ownership-map"
+      ]
+    },
+    {
+      "id": "project-spec-docs",
+      "label": "Project Spec Documentation",
+      "tier": "recommended",
+      "type": "local_skills",
+      "lifecycle": "active",
+      "reason": "Useful for lightweight PRD/spec artifacts, but source_of_truth will own the development-grade PRD flow.",
+      "degraded_mode": "Use source_of_truth interview-to-PRD once implemented.",
+      "checks": [
+        {
+          "kind": "skill_dir",
+          "name": "pm-spec"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "design-brief"
+        }
+      ],
+      "expected_skills": [
+        "pm-spec",
+        "design-brief"
+      ]
+    },
+    {
+      "id": "documents-and-pdfs",
+      "label": "Documents And PDFs",
+      "tier": "task_required",
+      "type": "plugins_and_skills",
+      "lifecycle": "active",
+      "reason": "Required only for Word, spreadsheet, presentation or PDF work.",
+      "degraded_mode": "Document conversion/editing tasks need manual tooling or must stop.",
+      "checks": [
+        {
+          "kind": "plugin_config",
+          "name": "documents@openai-primary-runtime"
+        },
+        {
+          "kind": "plugin_config",
+          "name": "pdf@openai-primary-runtime"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "pdf"
+        }
+      ],
+      "expected_skills": [
+        "documents:documents",
+        "pdf:pdf",
+        "spreadsheets:Spreadsheets",
+        "presentations:Presentations"
+      ]
+    },
+    {
+      "id": "creative-artifacts",
+      "label": "Creative Artifact Skills",
+      "tier": "task_required",
+      "type": "local_skills",
+      "lifecycle": "active",
+      "reason": "Required only when the user asks for decks, posters, dashboards, landing pages, video, audio or prototypes.",
+      "degraded_mode": "Use general implementation only after confirming artifact-specific skill is not needed.",
+      "checks": [
+        {
+          "kind": "skill_dir",
+          "name": "html-ppt"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "web-prototype"
+        },
+        {
+          "kind": "skill_dir",
+          "name": "image-poster"
+        }
+      ],
+      "expected_skills": [
+        "html-ppt",
+        "web-prototype",
+        "dashboard",
+        "mobile-app",
+        "image-poster",
+        "video-shortform",
+        "audio-jingle"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Source of Truth
 
-Личный AI Engineering playbook и starter kit для проектов с агентами.
+Личный AI Engineering playbook, starter kit и Codex onboarding pack для проектов с агентами.
 
 Это репозиторий-канон: как мои проекты стартуют, продолжаются, проверяются, передаются между сессиями и улучшаются. Смысл простой: не держать процесс в чате, а сделать так, чтобы каждый проект ощущался одинаково: один flow, один словарь, один след доказательств.
 
@@ -15,8 +15,9 @@ Workflow здесь local-first. GitHub нужен как понятная ви�
 | Слой | Назначение | Основные пути |
 | --- | --- | --- |
 | Публичный сайт | Блог, playbook-страницы, research notes и reusable prompts | `content/`, `layouts/`, `static/` |
+| Executable onboarding pack | Skill-driven подготовка сырого проекта к разработке | `skills/source-of-truth-onboarding/`, `scripts/install_codex_skill.ps1`, `scripts/audit_project_readiness.ps1` |
 | Starter kit | Project-local правила агентов, память, stages, evidence, templates и hooks | `templates/project-starter/`, `AGENTS.md`, `playbooks/`, `rules/`, `memory/` |
-| Personal Codex stack | Личный operating layer для Codex: стиль, skills, MCP, cleanup и no overcoding | `content/playbook/personal-codex-stack.md`, `docs/DECISIONS.md` |
+| Personal Codex stack | Личный operating layer для Codex: стиль, skills, MCP, cleanup и no overcoding | `registries/`, `content/playbook/personal-codex-stack.md`, `docs/DECISIONS.md` |
 
 Это не продуктовый репозиторий. Правда конкретного продукта должна жить в его репозитории. Здесь лежит переиспользуемая операционная система работы.
 
@@ -62,6 +63,13 @@ npm install
 npm run check
 ```
 
+Проверить capability и readiness gates:
+
+```powershell
+npm run audit:capabilities
+npm run audit:readiness
+```
+
 Запустить публичный сайт локально:
 
 ```powershell
@@ -78,12 +86,16 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 Потом первым делом заполнить:
 
 1. `memory/MEMORY.md`
-2. `develop/IMPLEMENTATION_PLAN.md`
-3. `develop/LOCAL_RUNBOOK.md`
-4. `develop/TODO.md`
-5. `develop/CHECKPOINT.md`
-6. первый checkpoint spec под `develop/stages/`
-7. project-specific заметки в `AGENTS.md`
+2. `docs/PRODUCT_DIRECTION.md`
+3. `docs/ARCHITECTURE.md`
+4. `docs/SKILLS.md`
+5. `memory/QUESTIONS.md` и `memory/LESSONS.md`
+6. `develop/IMPLEMENTATION_PLAN.md`
+7. `develop/LOCAL_RUNBOOK.md`
+8. `develop/TODO.md`
+9. `develop/CHECKPOINT.md`
+10. первый checkpoint spec под `develop/stages/`
+11. project-specific заметки в `AGENTS.md`
 
 ## С Чего Начинать
 
@@ -93,6 +105,8 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 - [content/playbook/personal-codex-stack.md](content/playbook/personal-codex-stack.md) - как держать личный Codex быстрым, точным и без мусорного контекста.
 - [playbooks/project-operating-flow.md](playbooks/project-operating-flow.md) - основной checkpoint workflow.
 - [playbooks/orchestrator-checkpoint-workflow.md](playbooks/orchestrator-checkpoint-workflow.md) - workflow для больших задач через orchestrator, registry и bounded subagents.
+- [registries/capabilities.md](registries/capabilities.md) - required/recommended skills, MCP и plugins для нормального Codex operating flow.
+- [skills/source-of-truth-onboarding/SKILL.md](skills/source-of-truth-onboarding/SKILL.md) - onboarding skill, который готовит проект до implementation.
 - [templates/project-starter/README.md](templates/project-starter/README.md) - что попадает в новый проект.
 - [docs/DECISIONS.md](docs/DECISIONS.md) - durable decisions по этому репозиторию.
 
@@ -101,6 +115,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 - Сначала прочитать [AGENTS.md](AGENTS.md).
 - Потом [memory/MEMORY.md](memory/MEMORY.md) и [memory/SESSION-HANDOFF.md](memory/SESSION-HANDOFF.md).
 - Выбрать подходящий playbook из [playbooks/](playbooks/).
+- Если задача зависит от skills, MCP, plugins или global Codex setup, проверить [registries/capabilities.json](registries/capabilities.json) и запустить read-only audit.
 - Держать состояние проекта в файлах, не в чате.
 - Для нетривиальной работы сначала написать или обновить checkpoint spec.
 
@@ -110,8 +125,11 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 source_of_truth/
   AGENTS.md                         главный operating guide
   README.md                         входная страница для GitHub
-  docs/DECISIONS.md                 durable decisions
+  docs/                             product direction, architecture, skills, decisions
+  develop/                          execution layer для самого source_of_truth
+  skills/source-of-truth-onboarding/ repo-owned onboarding skill
   memory/                           живая память и шаблоны памяти
+  registries/                       required/recommended capabilities и Codex global contour
   playbooks/                        повторяемые workflow
   rules/                            reusable agent/process rules
   hooks/                            hook prompt templates и будущие enforcement points
@@ -120,6 +138,8 @@ source_of_truth/
   content/                          контент Hugo-сайта
   layouts/                          Hugo layouts
   scripts/bootstrap_project.ps1     установщик starter kit
+  scripts/install_codex_skill.ps1   safe install/update repo-owned skills
+  scripts/audit_project_readiness.ps1 readiness gate для target projects
   work/                             volatile local artifacts
   archive/                          закрытые или демотированные материалы
 ```
@@ -134,9 +154,17 @@ project/
   CLAUDE.md
   .cursor/rules/project-canon.mdc
   .claude/rules/project-checklist.md
+  docs/PRODUCT_DIRECTION.md
+  docs/ARCHITECTURE.md
+  docs/SKILLS.md
+  docs/DECISIONS.md
   memory/MEMORY.md
   memory/SESSION-HANDOFF.md
-  docs/DECISIONS.md
+  memory/QUESTIONS.md
+  memory/LESSONS.md
+  rules/
+  hooks/
+  agents/README.md
   develop/README.md
   develop/IMPLEMENTATION_PLAN.md
   develop/LOCAL_RUNBOOK.md
@@ -152,7 +180,9 @@ project/
 Это дает каждому проекту один и тот же силуэт:
 
 - `AGENTS.md` говорит, как ведется работа.
+- `docs/` говорит, что строится, какие boundaries и какие skills нужны.
 - `memory/` говорит, что сейчас правда.
+- `rules/`, `hooks/` и `agents/` задают project-local operating contract.
 - `develop/TODO.md` держит локальную очередь.
 - `develop/CHECKPOINT.md` держит активный срез.
 - `develop/stages/` описывает, что выполнять.
@@ -246,12 +276,55 @@ link -> research note -> extracted pattern -> playbook update -> optional blog p
 
 - [content/research/agent-workflow-reference-scan.md](content/research/agent-workflow-reference-scan.md)
 
+## Capability Registry
+
+Внешние skills, MCP и plugins фиксируются не в глобальном `AGENTS.md`, а в registry:
+
+```text
+registries/capabilities.json
+registries/capabilities.md
+registries/codex-global.json
+```
+
+Проверить текущий Codex setup:
+
+```powershell
+npm run audit:capabilities
+```
+
+Прямой запуск:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\audit_codex_capabilities.ps1
+```
+
+Global Codex edits идут только через:
+
+```text
+audit -> proposed diff -> explicit approval -> backup -> scoped write -> verify -> evidence
+```
+
+Фраза разрешения на запись в `~/.codex`:
+
+```text
+разрешаю обновить глобалку Codex
+```
+
+Safe what-if для установки repo-owned onboarding skill:
+
+```powershell
+npm run install:onboarding-skill:whatif
+```
+
+Реальная установка в `~/.codex` разрешена только после явного approval и должна идти через backup/evidence.
+
 ## Принципы
 
 - Один canon, много тонких wrappers.
 - Контекст в файлах, не в chat history.
 - Reusable workflow лучше длинного prompt.
 - Повторяемые fixes превращаются в rules, templates, hooks или skills.
+- Required capabilities проверяются registry-аудитом, а не длинной ручной картой в глобалке.
 - Stable canon отдельно от volatile work artifacts.
 - Research - reference, не automatic requirement.
 

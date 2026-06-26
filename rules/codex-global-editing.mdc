@@ -1,0 +1,63 @@
+---
+description: Safe policy for auditing and editing the user's global Codex configuration
+alwaysApply: true
+---
+
+# Codex Global Editing
+
+`~/.codex` - runtime home, not a project scratchpad.
+
+## Default Mode
+
+Read-only audit is allowed when the user asks to inspect global Codex setup.
+
+Allowed read targets:
+
+- `~/.codex/AGENTS.md`
+- `~/.codex/AGENTS.override.md`
+- `~/.codex/config.toml`
+- `~/.codex/skills/**/SKILL.md`
+- `~/.agents/skills/**/SKILL.md`
+- `~/.codex/plugins/cache/**/SKILL.md`
+- non-secret registry or metadata files
+
+Do not print secrets, tokens, session contents, raw logs, auth files or sqlite data.
+
+## Write Gate
+
+Global writes are forbidden until the user gives explicit approval:
+
+```text
+разрешаю обновить глобалку Codex
+```
+
+Approval must name or clearly imply the target change. Broad permission for one task does not become permanent permission.
+
+## Required Before Any Write
+
+Before editing global Codex files:
+
+1. Identify exact target files.
+2. Show proposed change or summary diff.
+3. Back up every target file or directory.
+4. Edit only the approved target.
+5. Do not touch unrelated skills, plugins, MCP servers, auth/session/log/sqlite files or caches.
+6. Run the narrowest relevant verification.
+7. Write evidence with source path, target path, backup path, command and result.
+
+## Forbidden
+
+- Do not edit `auth.json`.
+- Do not edit session logs or sqlite state.
+- Do not delete broad `~/.codex` folders while Codex is running.
+- Do not install broad MCP/plugin sets just because they are popular.
+- Do not paste installed skill catalogs into global rules.
+- Do not overwrite user-created skills without backup and explicit target approval.
+
+## Preferred Flow
+
+```text
+audit -> proposed diff -> explicit approval -> backup -> scoped write -> verify -> evidence
+```
+
+If approval is missing, stop at proposed diff.

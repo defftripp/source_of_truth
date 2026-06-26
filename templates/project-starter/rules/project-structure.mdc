@@ -1,0 +1,23 @@
+---
+description: Project folder boundaries for durable docs, execution state, volatile work and archive
+alwaysApply: true
+---
+
+# Project Structure
+
+## Canonical Folders
+
+- `docs/`: product direction, architecture, decisions and skill registry.
+- `develop/`: implementation plan, active checkpoint, local runbook, stages and evidence.
+- `memory/`: current state, handoff, questions and lessons.
+- `rules/`: concise project rules.
+- `hooks/`: prompt/checklist hooks.
+- `agents/`: role contracts.
+- `work/`: volatile local artifacts.
+- `archive/`: closed or stale artifacts.
+
+## Boundaries
+
+- Generated folders are not source of truth.
+- Secrets do not belong in docs, memory, evidence or chat output.
+- Heavy logs/traces/screenshots stay under `output/` or `work/` and are linked from evidence.

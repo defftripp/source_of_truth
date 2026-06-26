@@ -1,0 +1,23 @@
+---
+description: Project-local source-of-truth workflow, checkpoint gates and evidence rules
+alwaysApply: true
+---
+
+# Agent Workflow
+
+Use the local source-of-truth files before implementation.
+
+## Flow
+
+```text
+intake -> read canon -> checkpoint -> implementation -> verification -> evidence -> memory
+```
+
+## Rules
+
+- One main agent owns final edits.
+- Subagents are read-only unless a checkpoint grants narrow disjoint write scope.
+- Non-trivial work needs an active checkpoint.
+- Every checkpoint needs scope, anti-scope, verification, evidence path and stop condition.
+- Missing product/architecture decisions go to `memory/QUESTIONS.md`.
+- Repeated lessons go to `memory/LESSONS.md` before promotion.

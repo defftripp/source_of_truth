@@ -1,0 +1,27 @@
+---
+description: Keep source-of-truth work direct, scoped and free of unnecessary abstractions
+alwaysApply: true
+---
+
+# No Overcoding
+
+Prefer the smallest direct change that makes the project more usable and easier to continue.
+
+## Rules
+
+- Do not add frameworks, dependencies, config layers or abstractions unless they remove real repeated pain.
+- Do not build automation before the manual rule is clear and repeated.
+- Do not create project-specific skills for one-off tasks.
+- Do not copy large catalogs into `AGENTS.md`.
+- Do not split docs into many files unless the split reduces search and maintenance cost.
+- Do not rewrite unrelated areas to satisfy a checkpoint.
+
+## Better Default
+
+Use:
+
+- concise rule for stable behavior;
+- playbook for reusable workflow;
+- skill for multi-step agent behavior;
+- script for deterministic repeated operations;
+- evidence artifact for checkpoint facts.

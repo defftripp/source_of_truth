@@ -1,0 +1,25 @@
+---
+description: Project verification gates and durable evidence requirements
+alwaysApply: true
+---
+
+# Testing And Evidence
+
+## Evidence Required For Checkpoint Work
+
+Write evidence under `develop/artifacts/**` with:
+
+- input;
+- scope and anti-scope;
+- files changed;
+- commands/checks run;
+- results;
+- known gaps;
+- next step.
+
+## Verification
+
+- Run repo-native tests, lint, build or smoke commands when available.
+- If checks cannot run, record the blocker.
+- Do not claim broad correctness from narrow proof.
+- For UI work, include browser or visual evidence when relevant.

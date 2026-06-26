@@ -18,15 +18,20 @@
 2. `memory/MEMORY.md`
 3. `memory/SESSION-HANDOFF.md`
 4. `docs/PRODUCT_DIRECTION.md` или аналог product direction
-5. активные PRD/FRD/SRD/TRD/QRD документы
-6. `develop/README.md`
-7. `develop/IMPLEMENTATION_PLAN.md`
-8. `develop/TODO.md`
-9. `develop/CHECKPOINT.md`
-10. active stage/checkpoint plan под `develop/stages/**`
-11. `develop/LOCAL_RUNBOOK.md`
-12. relevant prior artifacts под `develop/artifacts/**`
-13. relevant `research/**` notes
+5. `docs/ARCHITECTURE.md`
+6. `docs/SKILLS.md`
+7. активные PRD/FRD/SRD/TRD/QRD документы
+8. relevant `rules/**`
+9. relevant `hooks/**`
+10. `agents/README.md`
+11. `develop/README.md`
+12. `develop/IMPLEMENTATION_PLAN.md`
+13. `develop/TODO.md`
+14. `develop/CHECKPOINT.md`
+15. active stage/checkpoint plan под `develop/stages/**`
+16. `develop/LOCAL_RUNBOOK.md`
+17. relevant prior artifacts под `develop/artifacts/**`
+18. relevant `research/**` notes
 
 Если файл из списка отсутствует, отметить это и продолжить по лучшему доступному local canon.
 
@@ -35,6 +40,9 @@
 - Stable truth держать в `docs/`.
 - Execution plans держать в `develop/stages/`.
 - Checkpoint evidence держать в `develop/artifacts/`.
+- Skills/capability routing держать в `docs/SKILLS.md`.
+- Open questions держать в `memory/QUESTIONS.md`.
+- Reusable lessons держать в `memory/LESSONS.md`.
 - Volatile work держать в `work/`.
 - Closed or stale artifacts переносить в `archive/`.
 - Durable decisions записывать в `docs/DECISIONS.md`.
@@ -63,13 +71,14 @@
 1. Восстановить контекст из файлов, не из chat memory.
 2. Определить active goal и touched paths.
 3. Создать или обновить active plan/checkpoint spec для нетривиальной работы.
-4. Сделать smallest useful change.
-5. Запустить relevant checks.
-6. Использовать `reviewer` для scope/correctness/security review, если риск нетривиальный.
-7. Использовать `test-auditor`, чтобы найти missing regression checks.
-8. Написать evidence до того, как считать задачу done.
-9. Обновить memory/handoff, если изменились project state, assumptions или next steps.
-10. Поднять повторяющиеся lessons в rules, templates, hooks или skills.
+4. Пройти `hooks/pre-implementation-check.md`.
+5. Сделать smallest useful change.
+6. Запустить relevant checks.
+7. Использовать `reviewer` для scope/correctness/security review, если риск нетривиальный.
+8. Использовать `test-auditor`, чтобы найти missing regression checks.
+9. Написать evidence до того, как считать задачу done.
+10. Обновить memory/handoff, если изменились project state, assumptions или next steps.
+11. Поднять повторяющиеся lessons в rules, templates, hooks или skills.
 
 ## Agent Operating Model
 
