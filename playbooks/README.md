@@ -6,6 +6,7 @@ Use them as the first layer after `AGENTS.md`:
 
 - `start-project.md`: bootstrap a new project
 - `continue-project.md`: recover context and continue existing work
+- `project-operating-flow.md`: run bounded checkpoint work with subagents, gates and evidence
 - `feature.md`: implement a new feature safely
 - `bugfix.md`: fix a bug and leave behind a regression barrier
 - `refactor.md`: change structure without breaking behavior

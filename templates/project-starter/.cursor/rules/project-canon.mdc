@@ -12,8 +12,10 @@ This Cursor rule is a thin wrapper. Do not add project rules here unless they ar
 ## Working Pattern
 
 1. Reconstruct context from files.
-2. Follow the active project docs and stage/checkpoint plan.
-3. Keep changes scoped.
-4. Run relevant checks.
-5. Write evidence for checkpoint-weight work.
-6. Promote repeated lessons into the shared Source of Truth only when reusable.
+2. Read memory, implementation plan, runbook, and active stage/checkpoint spec.
+3. Keep changes scoped to one checkpoint.
+4. Use subagents as read-only helpers unless the checkpoint grants a disjoint write scope.
+5. Run relevant checks.
+6. Write evidence for checkpoint-weight work.
+7. Update memory/handoff when state changes.
+8. Promote repeated lessons into the shared Source of Truth only when reusable.

@@ -8,7 +8,10 @@ Use this checklist before and after major changes.
 
 - goal is explicit
 - `AGENTS.md` and relevant project docs were read
+- memory and handoff were checked
+- active stage/checkpoint spec is clear
 - touched areas are known
+- anti-scope is named
 - risks are named
 
 ## After
@@ -16,5 +19,6 @@ Use this checklist before and after major changes.
 - verification is done
 - evidence is written for checkpoint-weight work
 - memory updated if needed
+- handoff updated if another session may continue the work
 - next step is clear
 

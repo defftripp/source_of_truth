@@ -1,0 +1,30 @@
+---
+description: Cross-project agent workflow, checkpoint gates, subagent boundaries and evidence rules
+alwaysApply: true
+---
+
+# Agent Workflow
+
+Use the same operating flow in every project.
+
+## Canonical Flow
+
+```text
+intake -> source-of-truth read -> plan/checkpoint -> /goal -> subagent findings -> main patch -> verification -> evidence -> memory -> lesson promotion
+```
+
+## Hard Rules
+
+- One main agent owns final edits.
+- Subagents are read-only unless a checkpoint explicitly assigns a narrow disjoint write scope.
+- Non-trivial work needs a plan or checkpoint spec before implementation.
+- Every checkpoint needs scope, anti-scope, verification, evidence path and stop condition.
+- Verification must match the risk and blast radius.
+- State must live in files, not only in chat.
+- Research links become research notes first, then patterns, then playbook/rule changes if reusable.
+
+## Stop Instead Of Guessing
+
+Stop and record a blocker when required credentials, payment/provider approval, deploy access, official-doc verification, or local test ability is missing.
+
+Do not invent proof. A narrow check cannot prove a broad requirement.

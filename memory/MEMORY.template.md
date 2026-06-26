@@ -12,6 +12,14 @@
 - what works:
 - what is broken or missing:
 
+## Active Checkpoint
+
+- stage:
+- checkpoint:
+- status:
+- spec:
+- evidence:
+
 ## Constraints
 
 - product constraints:
@@ -33,6 +41,12 @@
 
 - next:
 - after that:
+
+## Open Blockers
+
+- blocker:
+- owner:
+- needed to unblock:
 
 ## Useful Commands
 
