@@ -106,6 +106,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap_project.ps1 -TargetPa
 - [playbooks/project-operating-flow.md](playbooks/project-operating-flow.md) - основной checkpoint workflow.
 - [playbooks/orchestrator-checkpoint-workflow.md](playbooks/orchestrator-checkpoint-workflow.md) - workflow для больших задач через orchestrator, registry и bounded subagents.
 - [registries/capabilities.md](registries/capabilities.md) - required/recommended skills, MCP и plugins для нормального Codex operating flow.
+- [registries/capability-sources.md](registries/capability-sources.md) - откуда брать skills, MCP и plugins и когда installation запрещена.
 - [skills/source-of-truth-onboarding/SKILL.md](skills/source-of-truth-onboarding/SKILL.md) - onboarding skill, который готовит проект до implementation.
 - [templates/project-starter/README.md](templates/project-starter/README.md) - что попадает в новый проект.
 - [docs/DECISIONS.md](docs/DECISIONS.md) - durable decisions по этому репозиторию.
@@ -283,7 +284,16 @@ link -> research note -> extracted pattern -> playbook update -> optional blog p
 ```text
 registries/capabilities.json
 registries/capabilities.md
+registries/capability-sources.md
 registries/codex-global.json
+```
+
+`capabilities.json` обязан содержать `sources[]` для каждой capability. Если source неизвестен, агент не ставит MCP/skill/plugin через guessed clone или shell snippet, а пишет `BLOCKED`/`DEGRADED` и сначала чинит registry.
+
+Для plugins config не считается установкой. Нужна cache-проверка:
+
+```text
+~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/.codex-plugin/plugin.json
 ```
 
 Проверить текущий Codex setup:

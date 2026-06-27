@@ -31,7 +31,7 @@
 - `docs/PRODUCT_DIRECTION.md` или `docs/PRD.md`
 - `docs/ARCHITECTURE.md`
 - `docs/SKILLS.md` или `develop/SKILL_REGISTRY.md`
-- `registries/` для required/recommended skills, MCP, plugins и global Codex contour
+- `registries/` для required/recommended skills, MCP, plugins, install sources/provenance и global Codex contour
 - `rules/` для reusable agent/process rules
 - `hooks/` для session/checkpoint prompt hooks
 - `agents/README.md` для role contracts
@@ -73,7 +73,7 @@ local intake
 - Feature/enhancement: определить user-visible outcome, scope, anti-scope, checks, stop condition и checkpoint evidence path.
 - Bug: воспроизвести или описать expected vs actual behavior, добавить или назвать regression barrier, потом patch.
 - Research/tool/reference link: сначала `content/research/`, потом extracted patterns, и только после этого rules/playbooks.
-- Skills/MCP/global Codex setup: сначала `registries/` и read-only audit, потом proposed diff, и только после явного разрешения global write.
+- Skills/MCP/global Codex setup: сначала `registries/` и read-only audit, проверить declared sources/provenance, потом proposed diff, и только после явного разрешения global write.
 - Blog/public content: не переносить private project data, если это явно не safe case study.
 - Local queue - default. Не требовать GitHub Issues или Projects, если пользователь явно не попросил.
 
@@ -99,7 +99,7 @@ local intake
 
 1. Прочитать project goal, `AGENTS.md` и current memory.
 2. Выбрать matching playbook из `playbooks/`.
-3. Проверить `registries/`, если задача зависит от skills, MCP, plugins или global Codex setup.
+3. Проверить `registries/`, если задача зависит от skills, MCP, plugins, install sources или global Codex setup.
 4. Для нетривиальной работы создать или обновить active plan/checkpoint spec.
 5. Сделать самый маленький useful change, который двигает проект.
 6. Запустить relevant verification gate или записать explicit blocker.

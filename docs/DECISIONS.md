@@ -22,6 +22,42 @@ Immediate migration:
 
 Status: accepted.
 
+## 2026-06-27 - Capability sources становятся обязательной частью registry
+
+Decision:
+
+- Добавить `sources[]` в `registries/capabilities.json` для каждой required/recommended/task-required capability.
+- Добавить `registries/capability-sources.md` как human-readable карту источников и install policy.
+- Считать missing source/provenance отдельной registry ошибкой, даже если capability уже установлена на текущей машине.
+- Запретить ad-hoc установку skills, MCP servers и plugins из guessed GitHub repos, random npm packages, PowerShell snippets или reconstructed installed snapshots.
+- Научить `scripts/audit_codex_capabilities.ps1` проверять наличие source metadata вместе с runtime availability.
+
+Rationale:
+
+- Installed `~/.codex/skills/**` и plugin cache показывают текущее состояние машины, но не отвечают на вопрос, откуда воспроизводимо взять capability.
+- Без declared source следующий агент вынужден импровизировать, что ломает безопасность и воспроизводимость.
+- Registry должен быть не только списком желаемых tools, но и контрактом поставки: source, allowed install mode, global write gate и degraded behavior.
+
+Status: accepted.
+
+## 2026-06-27 - Plugin config не считается доказательством установки
+
+Decision:
+
+- Для installable skills/plugins фиксировать конкретный upstream Git/source link, когда он известен.
+- Для Superpowers использовать `https://github.com/obra/Superpowers` как canonical upstream source.
+- Считать `[plugins."..."] enabled = true` только intent в `~/.codex/config.toml`, а не proof of availability.
+- Для plugin availability требовать cache artifact `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/.codex-plugin/plugin.json`.
+- Если installed local skill snapshot не имеет real upstream source, оставлять его `source_required_before_update`, а не придумывать ссылку.
+
+Rationale:
+
+- Config может содержать stale или manually-added plugin section.
+- Без plugin cache Codex не имеет plugin skills/tools, даже если config выглядит включенным.
+- Git/source links нужны для воспроизводимости; unknown source должен быть видимым долгом, а не замаскированным install path.
+
+Status: accepted.
+
 ## 2026-06-26 - Onboarding skill становится исполняемым мозгом процесса
 
 Decision:

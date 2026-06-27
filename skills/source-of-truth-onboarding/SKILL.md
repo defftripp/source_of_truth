@@ -37,7 +37,18 @@ Use repo scripts and templates as the hands. This skill is the brain.
 npm run audit:capabilities
 ```
 
-4. Run read-only project readiness audit when available:
+4. Read capability sources before any install proposal:
+
+```text
+registries/capabilities.json sources[]
+registries/capability-sources.md
+```
+
+If a missing skill, MCP server or plugin has no declared source, stop before installation and record the missing source as registry debt. Do not invent a GitHub repository, npm package, plugin name or PowerShell command from the capability name.
+
+For plugins, enabled config is only intent. Treat a plugin as available only if the capability audit can also find a matching plugin cache `.codex-plugin/plugin.json`.
+
+5. Run read-only project readiness audit when available:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\audit_project_readiness.ps1 -TargetPath <target-project>
@@ -161,6 +172,15 @@ Do not include secrets, auth files, raw provider payloads, signed URLs, payment 
 
 Repo-owned skills may be installed or updated from this repo when the user asks or when onboarding requires the missing/old skill.
 
+External skills, MCP servers and plugins may be installed only from declared sources in:
+
+```text
+registries/capabilities.json
+registries/capability-sources.md
+```
+
+Installed copies under `~/.codex/skills/**` are runtime snapshots, not reusable source unless the registry declares them as such.
+
 Global Codex writes require the exact approval phrase from the source repo policy:
 
 ```text
@@ -185,3 +205,5 @@ powershell -ExecutionPolicy Bypass -File scripts\install_codex_skill.ps1 -SkillN
 | Paste installed skill catalogs into global `AGENTS.md` | Keep global rules lean and use registries |
 | Mark ready with open blocking questions | Use `NEEDS_CONTEXT` or `BLOCKED` |
 | Edit `~/.codex` without approval | Stop at proposed change until approval phrase is given |
+| Install missing MCP/skills from guessed sources | Read `sources[]`; if absent, record registry debt and stop |
+| Treat plugin config as proof of install | Require plugin cache evidence too |

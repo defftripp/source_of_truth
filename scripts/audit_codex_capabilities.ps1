@@ -30,6 +30,7 @@ if (Test-Path -LiteralPath $configPath) {
 }
 
 $agentsHome = Join-Path $env:USERPROFILE ".agents"
+$pluginCacheRoot = Join-Path $CodexHome "plugins\cache"
 
 function Test-FileExists {
     param([string]$Path)
@@ -39,7 +40,7 @@ function Test-FileExists {
 function Test-ConfigSection {
     param(
         [string]$Text,
-        [string]$SectionRegex,
+        [string]$SectionHeader,
         [switch]$RequireEnabled
     )
 
@@ -47,16 +48,49 @@ function Test-ConfigSection {
         return $false
     }
 
-    $match = [regex]::Match($Text, "(?ms)^$SectionRegex\s*`$([\s\S]*?)(?=^\[|\z)")
+    $escapedHeader = [regex]::Escape($SectionHeader)
+    $match = [regex]::Match($Text, "(?ms)^\s*$escapedHeader\s*\r?\n(?<body>.*?)(?=^\s*\[|\z)")
     if (-not $match.Success) {
         return $false
     }
 
     if ($RequireEnabled) {
-        return ($match.Value -match '(?m)^\s*enabled\s*=\s*true\s*$')
+        return ($match.Groups["body"].Value -match '(?m)^\s*enabled\s*=\s*true\s*$')
     }
 
     return $true
+}
+
+function Test-PluginCache {
+    param($Check)
+
+    if (-not (Test-Path -LiteralPath $pluginCacheRoot -PathType Container)) {
+        return $false
+    }
+
+    $marketplaces = @()
+    if (Test-JsonValue -Object $Check -Name "marketplace") {
+        $marketplaces = @([string]$Check.marketplace)
+    } else {
+        $marketplaces = @(Get-ChildItem -LiteralPath $pluginCacheRoot -Directory | ForEach-Object { $_.Name })
+    }
+
+    foreach ($marketplace in $marketplaces) {
+        $pluginRoot = Join-Path $pluginCacheRoot (Join-Path $marketplace $Check.name)
+        if (-not (Test-Path -LiteralPath $pluginRoot -PathType Container)) {
+            continue
+        }
+
+        $pluginJson = Get-ChildItem -LiteralPath $pluginRoot -Recurse -File -Filter "plugin.json" |
+            Where-Object { $_.FullName -like "*\.codex-plugin\plugin.json" } |
+            Select-Object -First 1
+
+        if ($pluginJson) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Test-CapabilityCheck {
@@ -79,12 +113,13 @@ function Test-CapabilityCheck {
             return Test-FileExists (Join-Path $CodexHome "skills\.system\$($Check.name)\SKILL.md")
         }
         "mcp_server" {
-            $name = [regex]::Escape([string]$Check.name)
-            return Test-ConfigSection -Text $configText -SectionRegex "\[mcp_servers\.$name\]"
+            return Test-ConfigSection -Text $configText -SectionHeader "[mcp_servers.$($Check.name)]"
         }
         "plugin_config" {
-            $name = [regex]::Escape([string]$Check.name)
-            return Test-ConfigSection -Text $configText -SectionRegex "\[plugins\.`"$name`"\]" -RequireEnabled
+            return Test-ConfigSection -Text $configText -SectionHeader "[plugins.`"$($Check.name)`"]" -RequireEnabled
+        }
+        "plugin_cache" {
+            return Test-PluginCache -Check $Check
         }
         default {
             throw "Unknown capability check kind: $($Check.kind)"
@@ -103,14 +138,84 @@ function Get-CheckLabel {
         "system_skill" { return "system_skill:$($Check.name)" }
         "mcp_server" { return "mcp:$($Check.name)" }
         "plugin_config" { return "plugin:$($Check.name)" }
+        "plugin_cache" {
+            if (Test-JsonValue -Object $Check -Name "marketplace") {
+                return "plugin_cache:$($Check.marketplace)/$($Check.name)"
+            }
+            return "plugin_cache:$($Check.name)"
+        }
         default { return "$($Check.kind)" }
     }
+}
+
+function Test-JsonValue {
+    param(
+        $Object,
+        [string]$Name
+    )
+
+    if (-not $Object.PSObject.Properties[$Name]) {
+        return $false
+    }
+
+    $value = $Object.$Name
+    if ($null -eq $value) {
+        return $false
+    }
+
+    return (-not [string]::IsNullOrWhiteSpace([string]$value))
+}
+
+function Test-CapabilitySources {
+    param($Capability)
+
+    $problems = @()
+
+    if (-not $Capability.PSObject.Properties["sources"]) {
+        return @("source:sources[] missing")
+    }
+
+    if ($null -eq $Capability.sources) {
+        return @("source:sources[] empty")
+    }
+
+    $sources = @($Capability.sources | Where-Object { $null -ne $_ })
+    if ($sources.Count -eq 0) {
+        return @("source:sources[] empty")
+    }
+
+    $index = 0
+    foreach ($source in $sources) {
+        $index += 1
+
+        foreach ($requiredField in @("kind", "authority", "install_mode")) {
+            if (-not (Test-JsonValue -Object $source -Name $requiredField)) {
+                $problems += "source[$index]:missing $requiredField"
+            }
+        }
+
+        $hasLocator = (Test-JsonValue -Object $source -Name "ref") -or
+            (Test-JsonValue -Object $source -Name "url") -or
+            (Test-JsonValue -Object $source -Name "package") -or
+            (Test-JsonValue -Object $source -Name "target")
+
+        if (-not $hasLocator) {
+            $problems += "source[$index]:missing locator"
+        }
+
+        if ((Test-JsonValue -Object $source -Name "install_mode") -and $source.install_mode -eq "ad_hoc") {
+            $problems += "source[$index]:ad_hoc install_mode forbidden"
+        }
+    }
+
+    return $problems
 }
 
 $results = @()
 
 foreach ($capability in $registry.capabilities) {
     $missing = @()
+    $sourceProblems = @(Test-CapabilitySources -Capability $capability)
 
     foreach ($check in $capability.checks) {
         if (-not (Test-CapabilityCheck -Check $check)) {
@@ -118,8 +223,9 @@ foreach ($capability in $registry.capabilities) {
         }
     }
 
+    $allProblems = @($missing + $sourceProblems)
     $status = "PASS"
-    if ($missing.Count -gt 0) {
+    if ($allProblems.Count -gt 0) {
         if ($capability.tier -eq "required" -and $capability.lifecycle -eq "active") {
             $status = "BLOCKED"
         } else {
@@ -132,7 +238,7 @@ foreach ($capability in $registry.capabilities) {
         Tier = $capability.tier
         Id = $capability.id
         Lifecycle = $capability.lifecycle
-        Missing = ($missing -join ", ")
+        Missing = ($allProblems -join ", ")
         Reason = $capability.reason
     }
 }

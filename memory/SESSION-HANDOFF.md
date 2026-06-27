@@ -12,13 +12,17 @@
 - Добавлены правила безопасного global Codex editing: read-only audit first, запись в `~/.codex` только после явной фразы `разрешаю обновить глобалку Codex`.
 - Начата реализация executable onboarding pack: repo skill, install script, readiness audit, expanded starter template и root self-canon.
 - После explicit approval phrase `source-of-truth-onboarding` установлен в реальный `~/.codex`.
+- После замечания пользователя добавлен source/provenance слой для skills, MCP и plugins: каждая capability должна иметь `sources[]`, а missing source блокирует install proposal.
+- Capability audit теперь проверяет не только runtime availability, но и source metadata.
+- После второго замечания пользователя Superpowers source исправлен на `https://github.com/obra/Superpowers`, а plugin availability теперь требует cache artifact, не только config section.
+- После пользовательского списка links добавлены verified upstream sources для OpenAI skills, Open Design templates и OpenAI plugin document skills.
 
 ## Active Checkpoint
 
-- stage: source-of-truth onboarding automation
-- checkpoint: implement repo skill, safe install script, readiness audit and expanded starter template
-- status: DONE_WITH_CONCERNS
-- evidence: `develop/artifacts/onboarding/source-of-truth-onboarding.md`
+- stage: plugin cache and upstream links
+- checkpoint: add Git/upstream links and require plugin cache evidence
+- status: DONE_WITH_RUNTIME_BLOCKER
+- evidence: `develop/artifacts/capabilities/2026-06-27-user-supplied-source-links.md`
 
 ## Verified
 
@@ -42,6 +46,41 @@
 - Real global install - PASS, target `C:\Users\deff3\.codex\skills\source-of-truth-onboarding`, backup not needed.
 - Post-install `npm run audit:capabilities` - PASS=12 WARN=0 BLOCKED=0.
 - Post-install `npm run audit:readiness` - READY_FOR_IMPLEMENTATION with generated `public/` warning.
+- Capability-source checkpoint `npm run audit:capabilities` - PASS=9 WARN=3 BLOCKED=0.
+- Capability-source checkpoint `npm run audit:readiness` - READY_FOR_IMPLEMENTATION with generated `public/` warning.
+- Capability-source checkpoint `npm run check` - PASS, Hugo built 54 pages.
+- Capability-source checkpoint `git diff --check` - PASS, only LF-to-CRLF normalization warnings.
+- Plugin-cache checkpoint `npm run audit:capabilities` - expected BLOCKED: `superpowers` missing `plugin_cache:openai-curated/superpowers`.
+- Plugin-cache checkpoint `npm run audit:readiness` - READY_FOR_IMPLEMENTATION with generated `public/` warning.
+- Plugin-cache checkpoint `npm run check` - PASS, Hugo built 54 pages.
+- Plugin-cache checkpoint `git diff --check` - PASS, only LF-to-CRLF normalization warnings.
+- User-supplied source links verified against shallow local clones; every supplied path exists and contains `SKILL.md`.
+- User-supplied source link checkpoint `npm run audit:capabilities` - expected BLOCKED: `superpowers` missing `plugin_cache:openai-curated/superpowers`.
+- User-supplied source link checkpoint `npm run audit:readiness` - READY_FOR_IMPLEMENTATION with generated `public/` warning.
+- User-supplied source link checkpoint `npm run check` - PASS, Hugo built 54 pages.
+
+## Latest Capability Source Checkpoint
+
+- Added `registries/capability-sources.md`.
+- Updated `registries/capabilities.json` schema to version 2 with `sources[]` for every capability.
+- Updated audit scripts to catch missing source metadata and skills registry source/provenance gaps.
+- Updated onboarding skill, readiness checklist, project rules and starter template to forbid guessed installs.
+- Recorded decision in `docs/DECISIONS.md` and evidence in `develop/artifacts/capabilities/2026-06-27-capability-sources.md`.
+
+## Latest Plugin Cache Checkpoint
+
+- Verified Superpowers upstream repo `https://github.com/obra/Superpowers` at `896224c4b1879920ab573417e68fd51d2ccc9072`.
+- Added `plugin_cache` audit check.
+- Current global config has Superpowers enabled, but plugin cache is absent, so capability audit now blocks correctly.
+- No global config write was performed; cleanup/install needs explicit approval phrase.
+
+## Latest Source Link Checkpoint
+
+- Verified `https://github.com/openai/skills` at `49f948faa9258a0c61caceaf225e179651397431`.
+- Verified `https://github.com/nexu-io/open-design` at `b784c86507449d057ba50058f70cc9af27c5d026`.
+- Verified `https://github.com/openai/plugins` at `3fdeeb4970a1fa176ccabf873ae64fd6053cb2b0`.
+- Added sources for Playwright, security, PDF, design/spec, creative templates, and SharePoint document/spreadsheet/presentation skills.
+- `source_required_before_update` no longer appears in `registries/capabilities.json`.
 
 ## Files Touched In Latest Checkpoint
 
@@ -87,12 +126,16 @@
 
 - Hook enforcement пока описан текстом; executable hook scripts еще не добавлены.
 - `source-of-truth-onboarding` source skill создан и installed global copy поставлена после approval.
+- Some local skill snapshots are intentionally marked `source_required_before_update`; they are usable when installed, but not reinstallable elsewhere until a real upstream source is declared.
+- `superpowers@openai-curated` is currently stale/optimistic global config intent unless the plugin is installed into cache.
 - GitHub Issues/Projects намеренно не входят в default workflow.
 - Bootstrap script оставлен ASCII-safe: русские сообщения декодируются из UTF-8 base64, чтобы Windows PowerShell не ломал кириллицу без BOM.
 
 ## Next Best Action
 
-- Forward-test the new skill in a fresh session or subagent-capable environment.
+- Forward-test the updated onboarding skill in a fresh session or subagent-capable environment.
+- Later, decide whether local skill snapshots need real upstream sources or should stay machine-local.
+- After approval phrase, either install Superpowers through Codex plugin UI/marketplace or remove stale Superpowers config section.
 
 ## Notes For The Next Agent
 

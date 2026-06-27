@@ -31,7 +31,7 @@
 
 1. Заполнить `memory/MEMORY.md`.
 2. Заполнить `docs/PRODUCT_DIRECTION.md` и `docs/ARCHITECTURE.md`.
-3. Заполнить `docs/SKILLS.md`, `memory/QUESTIONS.md` и `memory/LESSONS.md`.
+3. Заполнить `docs/SKILLS.md`, включая sources/provenance для внешних skills/MCP/plugins, `memory/QUESTIONS.md` и `memory/LESSONS.md`.
 4. Заполнить `develop/IMPLEMENTATION_PLAN.md`: первый milestone и active checkpoint.
 5. Заполнить `develop/TODO.md` и `develop/CHECKPOINT.md`.
 6. Добавить первый checkpoint spec под `develop/stages/`.

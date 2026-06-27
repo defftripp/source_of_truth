@@ -1,7 +1,7 @@
 # Skills Registry
 
 Status: active
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 ## Repo-Owned Skills
 
@@ -15,6 +15,7 @@ The canonical list lives in:
 
 - `registries/capabilities.json`
 - `registries/capabilities.md`
+- `registries/capability-sources.md`
 - `registries/codex-global.json`
 
 Current required capabilities include Superpowers, Lazyweb, Context7, browser/Chrome/Playwright tooling, system skills and personal rule helpers.
@@ -25,3 +26,5 @@ Current required capabilities include Superpowers, Lazyweb, Context7, browser/Ch
 - Use live Codex skill registry at session start.
 - Use this file only for project-specific skill ownership and update rules.
 - Missing required capabilities must be reported as `DEGRADED` or `BLOCKED`.
+- Missing source/provenance metadata is a registry bug. Do not install external skills, MCP servers or plugins until a real source is declared in `sources[]`.
+- For plugins, enabled config is not enough. Audit must also find plugin cache evidence.

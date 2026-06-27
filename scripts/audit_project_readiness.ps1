@@ -168,6 +168,15 @@ if ($questions -match "(?im)blocking\s*:\s*yes") {
     $needsContext += "memory/QUESTIONS.md contains blocking questions"
 }
 
+$skillsRegistry = Read-TextIfExists -Root $targetFull -RelativePath "docs/SKILLS.md"
+if (-not $skillsRegistry) {
+    $skillsRegistry = Read-TextIfExists -Root $targetFull -RelativePath "develop/SKILL_REGISTRY.md"
+}
+
+if ($skillsRegistry -and $skillsRegistry -notmatch "(?im)source|provenance|источник") {
+    $needsContext += "skills registry does not mention capability sources/provenance"
+}
+
 $warnings = @()
 if (Test-RelativePath -Root $targetFull -RelativePath ".env" -Kind File) {
     $warnings += ".env exists; do not commit or quote secrets"

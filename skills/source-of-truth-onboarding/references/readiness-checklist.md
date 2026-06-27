@@ -22,6 +22,8 @@ Load this checklist before granting `READY_FOR_IMPLEMENTATION`.
 - Blocking questions are closed or marked `BLOCKED`.
 - Non-blocking questions are recorded as assumptions.
 - External capabilities are checked or degraded mode is explicit.
+- External capability sources are declared in `registries/capabilities.json sources[]` before any install/update proposal.
+- Plugin availability is proven by plugin cache, not only enabled config.
 
 ## Safety
 
@@ -29,6 +31,7 @@ Load this checklist before granting `READY_FOR_IMPLEMENTATION`.
 - Generated folders are not treated as source of truth.
 - Existing project files are preserved unless explicit overwrite was approved.
 - Global Codex writes are not performed without the approval phrase.
+- Missing skill/MCP/plugin sources are treated as blockers or degraded mode, not solved by guessed clones or package names.
 
 ## Final Status
 

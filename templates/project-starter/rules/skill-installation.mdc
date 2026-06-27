@@ -15,6 +15,10 @@ Use `docs/SKILLS.md` for project-specific skill routing.
 - Do not install broad MCP/plugin sets just because they are popular.
 - Do not edit global Codex files without explicit approval and backup.
 - Do not paste the full live skill catalog into project docs.
+- Do not install missing skills, MCP servers or plugins unless `docs/SKILLS.md` or the shared source_of_truth registry declares the source.
+- Treat installed skill folders as snapshots, not canonical sources.
+- Treat plugin config sections as intent; require plugin cache evidence before calling a plugin available.
+- If source is missing, record `BLOCKED` or `DEGRADED` and ask for/research the real source before proposing installation.
 
 ## Global Write Gate
 

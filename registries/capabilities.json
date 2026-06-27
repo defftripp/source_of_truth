@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "updated": "2026-06-26",
+  "schema_version": 2,
+  "updated": "2026-06-27",
   "purpose": "Required and recommended Codex capabilities for the source_of_truth operating system.",
   "tiers": {
     "required": "Needed for full source_of_truth onboarding and normal project operating flow.",
@@ -11,7 +11,8 @@
     "global_write_mode": "propose_diff_only",
     "global_write_approval_phrase": "разрешаю обновить глобалку Codex",
     "skill_catalog_policy": "Do not paste full installed skill maps into global AGENTS files. Use live registry plus this compact capability registry.",
-    "missing_required_behavior": "Report BLOCKED or DEGRADED mode and do not pretend the capability is available."
+    "missing_required_behavior": "Report BLOCKED or DEGRADED mode and do not pretend the capability is available.",
+    "source_metadata_policy": "Every capability must declare sources[]. Missing source metadata is a registry bug. Do not invent clone/install commands."
   },
   "capabilities": [
     {
@@ -22,6 +23,19 @@
       "lifecycle": "active",
       "reason": "Builds or repairs the full project operating layer before implementation.",
       "degraded_mode": "Manual onboarding falls back to playbooks/templates if the repo skill source is missing.",
+      "sources": [
+        {
+          "kind": "repo_path",
+          "authority": "source_of_truth repository",
+          "url": "https://github.com/defftripp/source_of_truth",
+          "ref": "skills/source-of-truth-onboarding/SKILL.md",
+          "install_mode": "repo_owned_script",
+          "install_command": "powershell -ExecutionPolicy Bypass -File scripts\\install_codex_skill.ps1 -SkillName source-of-truth-onboarding",
+          "global_write": "approval_required",
+          "verified_head": "5fd9fd2a641321d0c7d470d2d17761ee20f454a0",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "repo_path",
@@ -37,6 +51,20 @@
       "lifecycle": "user_gated",
       "reason": "Global Codex install lets the onboarding skill trigger outside this repo, but real global writes require explicit approval.",
       "degraded_mode": "Use the repo-local skill source and scripts directly until global install is approved.",
+      "sources": [
+        {
+          "kind": "repo_path",
+          "authority": "source_of_truth repository",
+          "url": "https://github.com/defftripp/source_of_truth",
+          "ref": "skills/source-of-truth-onboarding",
+          "install_mode": "repo_owned_script",
+          "install_command": "powershell -ExecutionPolicy Bypass -File scripts\\install_codex_skill.ps1 -SkillName source-of-truth-onboarding -Force",
+          "target": "~/.codex/skills/source-of-truth-onboarding",
+          "global_write": "approval_required",
+          "verified_head": "5fd9fd2a641321d0c7d470d2d17761ee20f454a0",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "installed_skill",
@@ -52,10 +80,29 @@
       "lifecycle": "active",
       "reason": "Provides mature brainstorming, planning, TDD, debugging, verification and review workflows.",
       "degraded_mode": "Design and plan gates must fall back to local source_of_truth playbooks.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "Superpowers upstream repository",
+          "url": "https://github.com/obra/Superpowers",
+          "ref": ".codex-plugin/plugin.json",
+          "install_mode": "codex_plugin_marketplace_or_upstream",
+          "install_command": "/plugins -> search superpowers -> install",
+          "global_write": "approval_required",
+          "verified_head": "896224c4b1879920ab573417e68fd51d2ccc9072",
+          "verified_at": "2026-06-27",
+          "notes": "Codex App/CLI install should use the plugin UI/marketplace. The GitHub repo is the canonical upstream source and contains .codex-plugin plus skills/."
+        }
+      ],
       "checks": [
         {
           "kind": "plugin_config",
           "name": "superpowers@openai-curated"
+        },
+        {
+          "kind": "plugin_cache",
+          "name": "superpowers",
+          "marketplace": "openai-curated"
         }
       ],
       "expected_skills": [
@@ -75,6 +122,17 @@
       "lifecycle": "active",
       "reason": "Product UI work must use real UI examples and Lazyweb evidence before design changes.",
       "degraded_mode": "Product UI recommendations are blocked or marked degraded until Lazyweb is fixed.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "Lazyweb skill pack",
+          "url": "https://github.com/aboul3ata/lazyweb-skill",
+          "install_mode": "upstream_installer",
+          "install_command": "curl -fsSL https://www.lazyweb.com/install.sh | bash",
+          "global_write": "approval_required",
+          "notes": "Installer owns Lazyweb skills and MCP wiring. On Windows, use the installer instructions from the installed Lazyweb skill or source repo."
+        }
+      ],
       "checks": [
         {
           "kind": "skill_dir",
@@ -101,6 +159,17 @@
       "lifecycle": "active",
       "reason": "Current library, framework, SDK, API and cloud documentation must come from live docs.",
       "degraded_mode": "Version-sensitive technical guidance is blocked until official docs are checked another way.",
+      "sources": [
+        {
+          "kind": "upstream_package",
+          "authority": "Upstash Context7",
+          "url": "https://github.com/upstash/context7",
+          "package": "@upstash/context7-mcp",
+          "install_mode": "mcp_config",
+          "install_command": "npx -y @upstash/context7-mcp",
+          "global_write": "approval_required"
+        }
+      ],
       "checks": [
         {
           "kind": "mcp_server",
@@ -116,14 +185,60 @@
       "lifecycle": "active",
       "reason": "Visible UI behavior must be verified in a real browser when a runnable UI exists.",
       "degraded_mode": "UI claims require explicit degraded evidence and cannot rely on source reading alone.",
+      "sources": [
+        {
+          "kind": "codex_plugin_catalog",
+          "authority": "OpenAI bundled plugin catalog",
+          "ref": "browser@openai-bundled",
+          "url": "https://github.com/openai/openai/tree/master/lib/browser_use/plugin",
+          "install_mode": "codex_plugin_install",
+          "global_write": "approval_required"
+        },
+        {
+          "kind": "codex_plugin_catalog",
+          "authority": "OpenAI bundled plugin catalog",
+          "ref": "chrome@openai-bundled",
+          "url": "https://github.com/openai/openai/tree/master/lib/browser_use/plugin",
+          "install_mode": "codex_plugin_install",
+          "global_write": "approval_required"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/playwright",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/playwright-interactive",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "plugin_config",
           "name": "browser@openai-bundled"
         },
         {
+          "kind": "plugin_cache",
+          "name": "browser",
+          "marketplace": "openai-bundled"
+        },
+        {
           "kind": "plugin_config",
           "name": "chrome@openai-bundled"
+        },
+        {
+          "kind": "plugin_cache",
+          "name": "chrome",
+          "marketplace": "openai-bundled"
         },
         {
           "kind": "skill_dir",
@@ -143,6 +258,15 @@
       "lifecycle": "active",
       "reason": "Core installation, creation, OpenAI docs and image generation workflows.",
       "degraded_mode": "Skill install/create and OpenAI-specific workflows require manual fallback.",
+      "sources": [
+        {
+          "kind": "codex_system",
+          "authority": "Codex system skill bundle",
+          "ref": "~/.codex/skills/.system",
+          "install_mode": "provided_by_runtime",
+          "notes": "Do not install manually from this repository."
+        }
+      ],
       "checks": [
         {
           "kind": "system_skill",
@@ -176,6 +300,17 @@
       "lifecycle": "active",
       "reason": "Preserves the user's terse style, rules loading flow, skill discovery and context packaging.",
       "degraded_mode": "Work continues, but style/rules sync/context packaging must be done manually.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "Personal skills repository",
+          "url": "https://github.com/defftripp/skills.git",
+          "install_mode": "skill_installer_or_repo_script",
+          "verified_head": "7dd2b2d533986f47d84e1b71f46aa8849c430cb2",
+          "verified_at": "2026-06-27",
+          "notes": "Use declared skill installer flow or repo scripts. Do not manually reconstruct these skills from installed snapshots."
+        }
+      ],
       "checks": [
         {
           "kind": "agent_skill",
@@ -211,6 +346,35 @@
       "lifecycle": "active",
       "reason": "Auth, payments, permissions, secrets and provider integrations need explicit security review paths.",
       "degraded_mode": "Security-heavy work must be marked degraded or use manual review.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/security-best-practices",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/security-threat-model",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/security-ownership-map",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "skill_dir",
@@ -239,6 +403,26 @@
       "lifecycle": "active",
       "reason": "Useful for lightweight PRD/spec artifacts, but source_of_truth will own the development-grade PRD flow.",
       "degraded_mode": "Use source_of_truth interview-to-PRD once implemented.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/pm-spec",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "skills/design-brief",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "skill_dir",
@@ -262,14 +446,80 @@
       "lifecycle": "active",
       "reason": "Required only for Word, spreadsheet, presentation or PDF work.",
       "degraded_mode": "Document conversion/editing tasks need manual tooling or must stop.",
+      "sources": [
+        {
+          "kind": "codex_plugin_catalog",
+          "authority": "OpenAI primary runtime plugin catalog",
+          "ref": "documents@openai-primary-runtime",
+          "url": "https://github.com/openai/plugins",
+          "install_mode": "codex_plugin_install",
+          "global_write": "approval_required",
+          "notes": "See OpenAI plugins repo document skills for canonical skill sources."
+        },
+        {
+          "kind": "codex_plugin_catalog",
+          "authority": "OpenAI primary runtime plugin catalog",
+          "ref": "pdf@openai-primary-runtime",
+          "url": "https://github.com/openai/plugins",
+          "install_mode": "codex_plugin_install",
+          "global_write": "approval_required",
+          "notes": "See OpenAI curated pdf skill source and OpenAI plugins repo document skills."
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI curated skills repository",
+          "url": "https://github.com/openai/skills",
+          "ref": "skills/.curated/pdf",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "49f948faa9258a0c61caceaf225e179651397431",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI plugins repository",
+          "url": "https://github.com/openai/plugins",
+          "ref": "plugins/sharepoint/skills/sharepoint-word-docs",
+          "install_mode": "plugin_skill_source",
+          "verified_head": "3fdeeb4970a1fa176ccabf873ae64fd6053cb2b0",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI plugins repository",
+          "url": "https://github.com/openai/plugins",
+          "ref": "plugins/sharepoint/skills/sharepoint-spreadsheets",
+          "install_mode": "plugin_skill_source",
+          "verified_head": "3fdeeb4970a1fa176ccabf873ae64fd6053cb2b0",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "OpenAI plugins repository",
+          "url": "https://github.com/openai/plugins",
+          "ref": "plugins/sharepoint/skills/sharepoint-powerpoint",
+          "install_mode": "plugin_skill_source",
+          "verified_head": "3fdeeb4970a1fa176ccabf873ae64fd6053cb2b0",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "plugin_config",
           "name": "documents@openai-primary-runtime"
         },
         {
+          "kind": "plugin_cache",
+          "name": "documents",
+          "marketplace": "openai-primary-runtime"
+        },
+        {
           "kind": "plugin_config",
           "name": "pdf@openai-primary-runtime"
+        },
+        {
+          "kind": "plugin_cache",
+          "name": "pdf",
+          "marketplace": "openai-primary-runtime"
         },
         {
           "kind": "skill_dir",
@@ -291,6 +541,71 @@
       "lifecycle": "active",
       "reason": "Required only when the user asks for decks, posters, dashboards, landing pages, video, audio or prototypes.",
       "degraded_mode": "Use general implementation only after confirming artifact-specific skill is not needed.",
+      "sources": [
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/html-ppt",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/web-prototype",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/dashboard",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/mobile-app",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/image-poster",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/video-shortform",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        },
+        {
+          "kind": "upstream_repo",
+          "authority": "Open Design repository",
+          "url": "https://github.com/nexu-io/open-design",
+          "ref": "design-templates/audio-jingle",
+          "install_mode": "skill_installer_or_repo_path",
+          "verified_head": "b784c86507449d057ba50058f70cc9af27c5d026",
+          "verified_at": "2026-06-27"
+        }
+      ],
       "checks": [
         {
           "kind": "skill_dir",

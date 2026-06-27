@@ -3,7 +3,7 @@
 Status: draft
 Last updated: YYYY-MM-DD
 
-Track only project-relevant skills. Do not paste the full installed skill catalog here.
+Track only project-relevant skills and their canonical sources. Do not paste the full installed skill catalog here.
 
 ## Required Skills
 
@@ -19,6 +19,13 @@ Track only project-relevant skills. Do not paste the full installed skill catalo
 | `lazyweb` | Product UI evidence before UI work. | task-required for product UI |
 | `context7` | Current library/framework docs. | task-required for version-sensitive technical work |
 
+## Source Policy
+
+- Every required or task-required external capability must have a source: repo path, upstream repo, package, Codex plugin catalog entry, or runtime-provided system bundle.
+- Installed `~/.codex/skills/**` folders are runtime snapshots, not install sources by themselves.
+- Enabled plugin config is intent, not proof. Plugin availability needs cache evidence.
+- If the source is unknown, mark the capability `DEGRADED` or `BLOCKED`; do not invent a clone/install command.
+
 ## Project-Local Skills
 
 - none yet
@@ -27,4 +34,5 @@ Track only project-relevant skills. Do not paste the full installed skill catalo
 
 - item:
 - impact:
+- source status:
 - next:

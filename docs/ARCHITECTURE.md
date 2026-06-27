@@ -1,7 +1,7 @@
 # Architecture
 
 Status: active
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 ## Layers
 
@@ -10,7 +10,7 @@ source_of_truth
   -> skills/        process brain for agents
   -> scripts/       deterministic install/audit/bootstrap actions
   -> templates/     files copied into target projects
-  -> registries/    required/recommended capabilities and global Codex policy
+  -> registries/    capabilities, install sources/provenance and global Codex policy
   -> rules/         concise reusable rules
   -> hooks/         prompt/checklist hooks
   -> playbooks/     reusable human-readable workflows
@@ -37,7 +37,8 @@ target repo
 - `content/` is publishing material, not the operational source for agents.
 - `templates/project-starter/` is the default copied skeleton.
 - `scripts/` may perform deterministic file operations, but global writes stay gated.
-- `registries/` defines external capabilities; global `AGENTS.md` remains lean.
+- `registries/` defines external capabilities, their install sources/provenance and safe global policy; global `AGENTS.md` remains lean.
+- Installed skill folders are runtime snapshots. They are not canonical install sources unless `registries/capabilities.json` declares them as such.
 - `develop/` tracks this repo's own active implementation work.
 
 ## Global Codex Safety

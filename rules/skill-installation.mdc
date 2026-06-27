@@ -10,6 +10,7 @@ The source of truth for must-have capabilities is:
 ```text
 registries/capabilities.json
 registries/capabilities.md
+registries/capability-sources.md
 registries/codex-global.json
 ```
 
@@ -51,13 +52,23 @@ When a task-required capability is missing:
 
 Repo-owned skills may be installed from this repository when the user explicitly asks or when the onboarding flow requires them.
 
-External skills should not be installed blindly. First:
+External skills, MCP servers and plugins must not be installed from undeclared sources. First:
 
+- read `registries/capabilities.json` and find the matching `sources[]` entry;
 - inspect source and `SKILL.md`;
 - confirm task value;
 - check for overlap with existing installed skills;
 - confirm whether it should be global or project-local;
 - use backup and evidence for global changes.
+
+If `sources[]` is missing, incomplete or says `source_required_before_update`, stop before installation. Record registry debt and ask for or research the real source. Do not guess a GitHub repo, npm package, PowerShell command or plugin name.
+
+Installed skill snapshots are evidence that a capability exists on this machine. They are not canonical install sources unless the registry says so.
+
+Plugin config sections are also not enough. For a plugin to count as available, audit must find both:
+
+- enabled `[plugins."..."]` entry in `~/.codex/config.toml`;
+- matching `~/.codex/plugins/cache/**/.codex-plugin/plugin.json`.
 
 ## No Global Skill Map
 

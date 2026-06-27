@@ -1,7 +1,7 @@
 # Product Direction
 
 Status: active
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 ## Product
 
@@ -32,6 +32,7 @@ Turn this repo from a public playbook site into an executable onboarding pack:
 - Codex-first onboarding flow.
 - Local-first planning and evidence.
 - Safe install/update of repo-owned skills.
+- Explicit source/provenance for external skills, MCP servers and plugins.
 - Readiness audit before implementation.
 - Starter template for new or under-structured projects.
 
@@ -49,3 +50,4 @@ Turn this repo from a public playbook site into an executable onboarding pack:
 - Missing docs/rules/memory/skills/checkpoints are created or reported.
 - The agent can say `READY_FOR_IMPLEMENTATION`, `NEEDS_CONTEXT` or `BLOCKED` with evidence.
 - Required skills/MCP/plugins are audited without copying the full live skill catalog into global rules.
+- Missing capability sources are visible as registry debt instead of being solved by guessed install commands.

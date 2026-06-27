@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "updated": "2026-06-26",
+  "schema_version": 2,
+  "updated": "2026-06-27",
   "purpose": "Expected global Codex contour for this source_of_truth pack.",
   "write_policy": {
     "mode": "propose_diff_only",
@@ -11,6 +11,17 @@
       "Do not edit auth.json, session files, sqlite logs, credentials, or unrelated skill folders.",
       "Do not install broad MCP/plugin sets without explicit task value.",
       "Do not paste full installed skill maps into AGENTS.md or AGENTS.override.md."
+    ]
+  },
+  "source_policy": {
+    "machine_registry": "registries/capabilities.json sources[]",
+    "human_registry": "registries/capability-sources.md",
+    "missing_source_behavior": "Do not install. Mark BLOCKED or DEGRADED and update the registry with a real source first.",
+    "plugin_availability": "Enabled plugin config is intent only. Availability requires a matching plugin cache .codex-plugin/plugin.json.",
+    "forbidden": [
+      "Do not invent GitHub repositories from capability names.",
+      "Do not reconstruct installable skills from installed snapshots.",
+      "Do not add MCP servers from random package search without first declaring source, package, command and approval requirement."
     ]
   },
   "global_files": [
@@ -54,6 +65,7 @@
   ],
   "notes": [
     "Global Codex files are runtime configuration, not the public source of truth.",
+    "Install sources live in registries/capabilities.json sources[], not in chat memory.",
     "This repository should generate proposals and audit reports before any global write.",
     "Global edits require explicit user approval and backup."
   ]
