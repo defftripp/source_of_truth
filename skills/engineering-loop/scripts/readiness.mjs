@@ -13,16 +13,25 @@ const RUNTIME_MANIFEST_PATH = ".engineering/runtime/manifest.json";
 
 /**
  * @param {string[]} args
- * @returns {{ explicit: boolean, target: string }}
+ * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "run" }}
  */
 export function parseArguments(args) {
   let explicit = false;
   let target = process.cwd();
+  /** @type {"readiness" | "onboard" | "run"} */
+  let operation = "readiness";
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--explicit") {
       explicit = true;
+      continue;
+    }
+    if (argument === "--onboard" || argument === "--run") {
+      if (operation !== "readiness") {
+        throw new Error("Choose only one launcher operation.");
+      }
+      operation = argument === "--onboard" ? "onboard" : "run";
       continue;
     }
     if (argument === "--target") {
@@ -37,7 +46,7 @@ export function parseArguments(args) {
     throw new Error(`Unknown argument: ${argument}`);
   }
 
-  return { explicit, target };
+  return { explicit, target, operation };
 }
 
 /** @param {string} candidate */
@@ -180,7 +189,7 @@ export async function probeReadiness(targetInput) {
     targetPath,
     checks,
     "Minimal pinned Project Runtime evidence is present.",
-    "Stop after readiness; runtime execution belongs to a later ticket.",
+    "Invoke the Global Launcher with --run to delegate to the project-local Runtime.",
   );
 }
 
@@ -261,7 +270,34 @@ export async function main(args = process.argv.slice(2)) {
     return 64;
   }
 
-  const report = await probeReadiness(options.target);
+  const readiness = await probeReadiness(options.target);
+  if (options.operation === "onboard") {
+    if (readiness.status !== "ONBOARDING_REQUIRED") {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+      return readiness.status === "BLOCKED" ? 1 : 0;
+    }
+    const onboardingModule = await import(new URL("./onboard.mjs", import.meta.url).href);
+    const report = await onboardingModule.onboardProject(options.target);
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  if (options.operation === "run") {
+    if (readiness.status !== "READY") {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+      return readiness.status === "BLOCKED" ? 1 : 0;
+    }
+    const runtimePath = path.join(
+      path.resolve(options.target),
+      ".engineering",
+      "runtime",
+      "engine.mjs",
+    );
+    const runtime = await import(pathToFileURL(runtimePath).href);
+    const report = await runtime.runEngineeringRun(options.target);
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  const report = readiness;
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   return report.status === "BLOCKED" ? 1 : 0;
 }
@@ -283,5 +319,11 @@ const isDirectExecution =
   process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 
 if (isDirectExecution) {
-  process.exitCode = await main();
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Global Launcher failed.";
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }

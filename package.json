@@ -2,7 +2,7 @@
   "name": "codex-engineering-loop",
   "version": "0.1.0",
   "private": true,
-  "description": "Explicit Global Launcher and read-only readiness probe for Codex Engineering Loop",
+  "description": "Explicit Global Launcher and pinned new-project runtime for Codex Engineering Loop",
   "type": "module",
   "engines": {
     "node": ">=20"

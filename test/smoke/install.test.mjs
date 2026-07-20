@@ -76,6 +76,28 @@ test("npx skills discovers and globally installs engineering-loop for Codex", as
     ]);
     assert.equal(invocation.code, 0, invocation.stderr);
     assert.equal(JSON.parse(invocation.stdout).status, "ONBOARDING_REQUIRED");
+
+    const onboarding = await runProcess(process.execPath, [
+      installedLauncher,
+      "--explicit",
+      "--onboard",
+      "--target",
+      target,
+    ]);
+    assert.equal(onboarding.code, 0, `${onboarding.stdout}\n${onboarding.stderr}`);
+    assert.equal(JSON.parse(onboarding.stdout).status, "PREPARED_PROJECT");
+
+    const engineeringRun = await runProcess(process.execPath, [
+      installedLauncher,
+      "--explicit",
+      "--run",
+      "--target",
+      target,
+    ]);
+    assert.equal(engineeringRun.code, 0, `${engineeringRun.stdout}\n${engineeringRun.stderr}`);
+    const runReport = JSON.parse(engineeringRun.stdout);
+    assert.equal(runReport.status, "PREPARED_PROJECT");
+    assert.equal(runReport.runtimeVersion, "1.0.0");
   } finally {
     await rm(isolatedHome, { recursive: true, force: true });
   }

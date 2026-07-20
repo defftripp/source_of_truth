@@ -32,5 +32,7 @@ test("engineering-loop is the only required entrypoint and cannot auto-invoke", 
   assert.equal(readScalar(frontmatter, "name"), "engineering-loop");
   assert.equal(readScalar(frontmatter, "disable-model-invocation"), "true");
   assert.match(source, /\$engineering-loop/);
-  assert.match(source, /Do not start onboarding or normalization/i);
+  assert.match(source, /--onboard/);
+  assert.match(source, /\.engineering\/runtime\/engine\.mjs/);
+  assert.match(source, /legacy normalization[\s\S]*outside/i);
 });

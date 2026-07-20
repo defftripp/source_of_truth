@@ -1,8 +1,8 @@
 ---
 name: engineering-loop
-description: Explicit entrypoint for the Codex Engineering Loop. Probes whether the current Target Project has evidence of a pinned Project Runtime and stops at a readiness status.
+description: Explicit entrypoint for the Codex Engineering Loop. Probes readiness, prepares a new Target Project when explicitly requested, and delegates Engineering Runs to its pinned project-local Runtime.
 disable-model-invocation: true
-compatibility: Requires Node.js 20 or newer. Readiness probing is read-only and cross-platform.
+compatibility: Requires Node.js 20 or newer. Readiness is read-only; new-project onboarding is explicit and cross-platform.
 metadata:
   short-description: Explicit Codex Engineering Loop launcher
 ---
@@ -12,7 +12,7 @@ metadata:
 Run this launcher only when the user explicitly invokes `$engineering-loop`.
 Do not infer invocation from a request that merely resembles engineering work.
 
-## Readiness probe
+## Entry flow
 
 1. Treat the current working directory as the Target Project unless the user
    explicitly names another target.
@@ -21,21 +21,29 @@ Do not infer invocation from a request that merely resembles engineering work.
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --target <absolute-target-project>`
 
-4. Read the JSON report from stdout and preserve its exact `status`, `checks`,
-   and `nextAction` in the response.
-5. If the status is `ONBOARDING_REQUIRED`, report the missing readiness
-   evidence and stop.
+4. Read the JSON report from stdout and preserve its exact status and evidence.
+5. If the status is `ONBOARDING_REQUIRED` and the user explicitly requested
+   onboarding for a new Target Project, rerun with `--onboard`:
 
-Do not start onboarding or normalization. Do not install a Project Runtime.
-Do not create, edit, move, or delete Target Project files. Those operations
-require a later explicit workflow and are outside this launcher.
+   `node <skill-directory>/scripts/readiness.mjs --explicit --onboard --target <absolute-target-project>`
+
+6. If the status is `READY`, delegate the Engineering Run with `--run`:
+
+   `node <skill-directory>/scripts/readiness.mjs --explicit --run --target <absolute-target-project>`
+
+The delegated executable must be the installed
+`.engineering/runtime/engine.mjs`. Never replace it with files from the Global
+Launcher. Legacy normalization, migration planning, and changes to an existing
+`.engineering` control plane are outside this workflow.
 
 ## Status contract
 
 - `ONBOARDING_REQUIRED` (exit `0`): required Project Runtime evidence is absent
   or invalid; no mutation occurred.
 - `READY` (exit `0`): the minimal pinned-runtime evidence is present; this
-  launcher has completed its readiness-only responsibility.
+  launcher can delegate to the project-local Runtime.
+- `PREPARED_PROJECT` (exit `0`): onboarding installed the Canonical Project
+  Shell and the project-local Runtime passed its registered smoke verification.
 - `BLOCKED` (exit `1`): the target cannot be inspected safely.
 - `EXPLICIT_INVOCATION_REQUIRED` (exit `64`): the deterministic entrypoint was
   called without its explicit invocation guard; the probe did not run.
