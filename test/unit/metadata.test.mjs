@@ -37,5 +37,8 @@ test("engineering-loop is the only required entrypoint and cannot auto-invoke", 
   assert.match(source, /NORMALIZATION_PROPOSED/);
   assert.match(source, /Human Gate/);
   assert.match(source, /\.engineering\/runtime\/engine\.mjs/);
-  assert.match(source, /Applying a Migration Manifest[\s\S]*outside/i);
+  assert.match(source, /--apply-manifest/);
+  assert.match(source, /--approve-hash/);
+  assert.match(source, /--rollback/);
+  assert.match(source, /Never apply a manifest whose approved hash/);
 });

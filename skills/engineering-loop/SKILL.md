@@ -1,8 +1,8 @@
 ---
 name: engineering-loop
-description: Explicit entrypoint for the Codex Engineering Loop. Probes readiness, proposes safe legacy normalization, prepares a new Target Project when explicitly requested, and delegates Engineering Runs to its pinned project-local Runtime.
+description: Explicit entrypoint for the Codex Engineering Loop. Probes readiness, proposes and applies approved legacy normalization, prepares a new Target Project, and delegates Engineering Runs to its pinned project-local Runtime.
 disable-model-invocation: true
-compatibility: Requires Node.js 20 or newer. Readiness and normalization proposals are read-only; new-project onboarding is explicit and cross-platform.
+compatibility: Requires Node.js 20 or newer. Readiness and normalization proposals are read-only; apply, rollback, and onboarding require explicit invocation and are cross-platform.
 metadata:
   short-description: Explicit Codex Engineering Loop launcher
 ---
@@ -27,21 +27,33 @@ Do not infer invocation from a request that merely resembles engineering work.
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --normalize --target <absolute-target-project>`
 
-   Stop at `NORMALIZATION_PROPOSED`. Present its complete hash-bound Migration
-   Manifest for Human Gate review; do not apply any action in this workflow.
-6. If the status is `ONBOARDING_REQUIRED` and the user explicitly requested
+   Stop at `NORMALIZATION_PROPOSED` and present its complete hash-bound Migration
+   Manifest for Human Gate review.
+6. If the user explicitly approves that exact manifest hash, save the manifest
+   outside the Target Project and apply it with:
+
+   `node <skill-directory>/scripts/readiness.mjs --explicit --apply-manifest <manifest.json> --approve-hash <sha256> --target <absolute-target-project>`
+
+   Pass `--overrides <overrides.json>` only when the user explicitly approves
+   those exact existing manifest paths and replacement actions. Preserve the
+   returned rollback token.
+7. If the user explicitly requests rollback, use:
+
+   `node <skill-directory>/scripts/readiness.mjs --explicit --rollback <rollback-token> --target <absolute-target-project>`
+
+8. If the status is `ONBOARDING_REQUIRED` and the user explicitly requested
    onboarding for a new Target Project, rerun with `--onboard`:
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --onboard --target <absolute-target-project>`
 
-7. If the status is `READY`, delegate the Engineering Run with `--run`:
+9. If the status is `READY`, delegate the Engineering Run with `--run`:
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --run --target <absolute-target-project>`
 
 The delegated executable must be the installed
 `.engineering/runtime/engine.mjs`. Never replace it with files from the Global
-Launcher. Applying a Migration Manifest, overrides, rollback, and changes to an
-existing `.engineering` control plane are outside this workflow.
+Launcher. Never apply a manifest whose approved hash or current source hashes
+fail preflight.
 
 ## Status contract
 
@@ -53,6 +65,8 @@ existing `.engineering` control plane are outside this workflow.
   Shell and the project-local Runtime passed its registered smoke verification.
 - `NORMALIZATION_PROPOSED` (exit `0`): a deterministic Migration Manifest was
   produced without mutation and is waiting at a Human Gate.
+- `NORMALIZATION_ROLLED_BACK` (exit `0`): the transaction token restored the
+  pre-normalization project tree.
 - `BLOCKED` (exit `1`): the target cannot be inspected safely.
 - `EXPLICIT_INVOCATION_REQUIRED` (exit `64`): the deterministic entrypoint was
   called without its explicit invocation guard; the probe did not run.

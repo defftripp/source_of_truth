@@ -13,18 +13,56 @@ const RUNTIME_MANIFEST_PATH = ".engineering/runtime/manifest.json";
 
 /**
  * @param {string[]} args
- * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "run" }}
+ * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run", manifestPath?: string, approvedHash?: string, overridesPath?: string, rollbackToken?: string }}
  */
 export function parseArguments(args) {
   let explicit = false;
   let target = process.cwd();
-  /** @type {"readiness" | "onboard" | "normalize" | "run"} */
+  /** @type {"readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run"} */
   let operation = "readiness";
+  let manifestPath;
+  let approvedHash;
+  let overridesPath;
+  let rollbackToken;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--explicit") {
       explicit = true;
+      continue;
+    }
+    if (argument === "--apply-manifest") {
+      if (operation !== "readiness" || !args[index + 1]) {
+        throw new Error("--apply-manifest requires a path and cannot be combined with another operation");
+      }
+      operation = "apply";
+      manifestPath = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (argument === "--rollback") {
+      if (operation !== "readiness" || !args[index + 1]) {
+        throw new Error("--rollback requires a token and cannot be combined with another operation");
+      }
+      operation = "rollback";
+      rollbackToken = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (argument === "--approve-hash") {
+      if (!args[index + 1]) {
+        throw new Error("--approve-hash requires a SHA-256 hash");
+      }
+      approvedHash = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (argument === "--overrides") {
+      if (!args[index + 1]) {
+        throw new Error("--overrides requires a path");
+      }
+      overridesPath = args[index + 1];
+      index += 1;
       continue;
     }
     if (argument === "--onboard" || argument === "--normalize" || argument === "--run") {
@@ -47,7 +85,18 @@ export function parseArguments(args) {
     throw new Error(`Unknown argument: ${argument}`);
   }
 
-  return { explicit, target, operation };
+  if (operation === "apply" && (!manifestPath || !approvedHash)) {
+    throw new Error("Apply requires --apply-manifest and --approve-hash");
+  }
+  return {
+    explicit,
+    target,
+    operation,
+    manifestPath,
+    approvedHash,
+    overridesPath,
+    rollbackToken,
+  };
 }
 
 /** @param {string} candidate */
@@ -194,6 +243,21 @@ export async function probeReadiness(targetInput) {
   );
 }
 
+/** @param {string} target */
+export async function validatePreparedProject(target) {
+  const readiness = await probeReadiness(target);
+  if (readiness.status !== "READY") {
+    throw new Error("Applied manifest did not produce a ready Project Runtime.");
+  }
+  const runtimePath = path.join(path.resolve(target), ".engineering", "runtime", "engine.mjs");
+  const runtime = await import(pathToFileURL(runtimePath).href);
+  const prepared = await runtime.runEngineeringRun(target);
+  if (prepared.status !== "PREPARED_PROJECT" || prepared.smoke?.status !== "PASS") {
+    throw new Error("Applied manifest failed Project Runtime smoke validation.");
+  }
+  return { readiness, prepared };
+}
+
 /**
  * @param {string} targetPath
  * @param {ReadinessCheck[]} checks
@@ -272,6 +336,36 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   const readiness = await probeReadiness(options.target);
+  if (options.operation === "rollback") {
+    const applyModule = await import(new URL("./apply.mjs", import.meta.url).href);
+    const report = await applyModule.rollbackMigration(
+      options.target,
+      options.rollbackToken ?? "",
+    );
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
+  if (options.operation === "apply") {
+    if (readiness.status === "BLOCKED") {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+      return 1;
+    }
+    const source = await readFile(path.resolve(options.manifestPath ?? ""), "utf8");
+    const manifest = JSON.parse(source);
+    const overrides = options.overridesPath
+      ? JSON.parse(await readFile(path.resolve(options.overridesPath), "utf8"))
+      : undefined;
+    const applyModule = await import(new URL("./apply.mjs", import.meta.url).href);
+    const report = await applyModule.applyMigrationManifest(
+      options.target,
+      manifest,
+      options.approvedHash,
+      validatePreparedProject,
+      overrides,
+    );
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
   if (options.operation === "normalize") {
     if (readiness.status === "BLOCKED") {
       process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);

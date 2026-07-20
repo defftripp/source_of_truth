@@ -43,8 +43,8 @@ Subsequent runs delegate only to the installed project-local runtime:
 node <installed-skill>/scripts/readiness.mjs --explicit --run --target <project>
 ```
 
-Replacing the Global Launcher does not replace that pinned runtime. Applying a
-legacy migration and the full task lifecycle belong to later tickets.
+Replacing the Global Launcher does not replace that pinned runtime. The full
+task lifecycle belongs to later tickets.
 
 ## Legacy normalization proposal
 
@@ -62,7 +62,36 @@ SHA-256 hash bound to the proposed action scope. Sensitive, ambiguous, and
 deliberate local paths default to `PROTECT`. The command does not write the
 manifest or otherwise modify the Target Project. Non-directory ancestor
 conflicts suppress unsafe descendant `CREATE` actions and are recorded for
-review. Applying the proposal requires a later Human Gate workflow.
+review.
+
+## Apply and rollback a legacy migration
+
+Save the exact proposed `manifest` object, review it, and approve its printed
+hash explicitly:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --apply-manifest <manifest.json> --approve-hash <sha256> --target <project>
+```
+
+Apply validates the manifest schema, canonical hash, current source hashes,
+destinations, and complete action set before its first mutation. It executes
+only listed `CREATE`, `MOVE`, `REWRITE`, and `DELETE` actions while enforcing
+`KEEP` and `PROTECT` content hashes. Rewrite content is base64 encoded and its
+SHA-256 digest participates in the manifest hash.
+
+An optional one-time override document is passed with `--overrides <file>`. It
+uses schema `1`, binds itself to the exact `manifestHash`, and lists exact
+existing manifest paths plus replacement actions. It cannot introduce a
+neighboring path. Successful application reruns readiness and installed-runtime
+smoke, returns `PREPARED_PROJECT`, and includes a `rollbackToken`.
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --rollback <rollback-token> --target <project>
+```
+
+Rollback restores moved, rewritten, and deleted content and removes paths that
+the manifest created. A post-apply readiness or smoke failure triggers the same
+rollback automatically before returning failure.
 
 ## Readiness evidence
 

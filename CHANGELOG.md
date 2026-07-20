@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Apply Migration Manifests only with exact SHA-256 approval and source preflight.
+- Add path-scoped one-time overrides, transactional rollback, and post-apply smoke validation.
 - Add read-only legacy-project inventory and hash-bound Migration Manifest proposals.
 - Protect sensitive, ambiguous, and deliberate local files before the Human Gate.
 - Add explicit onboarding for a new Target Project and its Canonical Project Shell.

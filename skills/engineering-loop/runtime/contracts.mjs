@@ -241,6 +241,27 @@ export function validateMigrationManifest(manifest) {
     } else if (candidateAction.destination !== undefined) {
       errors.push(`actions[${index}].destination is only valid for MOVE`);
     }
+    if (candidateAction.action === "REWRITE") {
+      if (!isCanonicalBase64(candidateAction.contentBase64)) {
+        errors.push(`actions[${index}].contentBase64 must be canonical base64 for REWRITE`);
+      }
+      if (
+        !isNonEmptyString(candidateAction.contentSha256) ||
+        !/^[a-f0-9]{64}$/iu.test(candidateAction.contentSha256)
+      ) {
+        errors.push(`actions[${index}].contentSha256 must be a SHA-256 digest for REWRITE`);
+      } else if (
+        isCanonicalBase64(candidateAction.contentBase64) &&
+        sha256(Buffer.from(candidateAction.contentBase64, "base64")) !== candidateAction.contentSha256
+      ) {
+        errors.push(`actions[${index}].contentSha256 must match contentBase64`);
+      }
+    } else if (
+      candidateAction.contentBase64 !== undefined ||
+      candidateAction.contentSha256 !== undefined
+    ) {
+      errors.push(`actions[${index}].rewrite content is only valid for REWRITE`);
+    }
     if (
       candidateAction.sourceSha256 !== undefined &&
       (!isNonEmptyString(candidateAction.sourceSha256) ||
@@ -414,12 +435,23 @@ function findNonDirectoryAncestor(candidate, entries) {
 }
 
 /** @param {unknown} value @returns {value is string} */
-function isSafeProjectPath(value) {
+export function isSafeProjectPath(value) {
   return (
     isNonEmptyString(value) &&
     value !== "." &&
     !path.isAbsolute(value) &&
     !value.split(/[\\/]/u).includes("..")
+  );
+}
+
+/** @param {unknown} value @returns {value is string} */
+function isCanonicalBase64(value) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length % 4 === 0 &&
+    /^[A-Za-z0-9+/]*={0,2}$/u.test(value) &&
+    Buffer.from(value, "base64").toString("base64") === value
   );
 }
 
@@ -454,6 +486,7 @@ function migrationActionScope(action) {
     path: action.path,
     ...(action.destination ? { destination: action.destination } : {}),
     ...(action.sourceSha256 ? { sourceSha256: action.sourceSha256 } : {}),
+    ...(action.contentSha256 ? { contentSha256: action.contentSha256 } : {}),
   };
 }
 
@@ -503,7 +536,9 @@ export async function verifyFileChecksums(root, files) {
  *   rollback: string,
  *   destructive: boolean,
  *   destination?: string,
- *   sourceSha256?: string
+ *   sourceSha256?: string,
+ *   contentBase64?: string,
+ *   contentSha256?: string
  * }} MigrationAction
  */
 

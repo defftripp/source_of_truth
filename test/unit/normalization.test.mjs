@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -10,6 +19,7 @@ import {
   MIGRATION_OWNERS,
   MIGRATION_RISKS,
   migrationDestructiveScope,
+  sha256,
   validateMigrationManifest,
 } from "../../skills/engineering-loop/runtime/contracts.mjs";
 import { runProcess } from "../support/process.mjs";
@@ -432,7 +442,7 @@ test("Migration Manifest schema represents every supported action kind", () => {
  * @param {string} [sourceSha256]
  */
 function migrationAction(action, actionPath, ownership, risk, destructive, sourceSha256) {
-  return {
+  const migration = {
     action,
     path: actionPath,
     ownership,
@@ -442,6 +452,14 @@ function migrationAction(action, actionPath, ownership, risk, destructive, sourc
     destructive,
     ...(sourceSha256 ? { sourceSha256 } : {}),
   };
+  if (action === "REWRITE") {
+    const content = Buffer.from("rewritten fixture\n", "utf8");
+    Object.assign(migration, {
+      contentBase64: content.toString("base64"),
+      contentSha256: sha256(content),
+    });
+  }
+  return migration;
 }
 
 test("normalization recognizes a custom Python layout without universalizing it", async () => {
@@ -485,6 +503,466 @@ test("normalization recognizes a custom Python layout without universalizing it"
         ),
       true,
     );
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("exact hash approval applies a legacy manifest and reaches Prepared Project", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-apply-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, `${proposal.stdout}\n${proposal.stderr}`);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 0, `${applied.stdout}\n${applied.stderr}`);
+    assert.equal(applied.stderr, "");
+    const report = JSON.parse(applied.stdout);
+    assert.equal(report.status, "PREPARED_PROJECT");
+    assert.equal(report.manifestHash, manifest.hash);
+    assert.equal(report.readiness.status, "READY");
+    assert.equal(report.smoke.status, "PASS");
+    assert.equal(typeof report.rollbackToken, "string");
+    assert.ok(report.rollbackToken.length > 0);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("wrong, modified, and stale manifests are rejected before mutation", async () => {
+  for (const scenario of ["wrong approval", "modified manifest", "stale source"]) {
+    const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-reject-"));
+    const target = path.join(sandbox, "legacy target");
+    const manifestPath = path.join(sandbox, "migration-manifest.json");
+    await cp(nodeFixture, target, { recursive: true });
+
+    try {
+      const proposal = await runProcess(process.execPath, [
+        launcherPath,
+        "--explicit",
+        "--normalize",
+        "--target",
+        target,
+      ]);
+      assert.equal(proposal.code, 0, proposal.stderr);
+      const manifest = JSON.parse(proposal.stdout).manifest;
+      let approvedHash = manifest.hash;
+      if (scenario === "wrong approval") {
+        approvedHash = "f".repeat(64);
+      } else if (scenario === "modified manifest") {
+        manifest.actions[0].path = `${manifest.actions[0].path}-modified`;
+      } else {
+        await writeFile(path.join(target, "src", "app.mjs"), "export const stale = true;\n", "utf8");
+      }
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      const before = await snapshotTree(target);
+
+      const applied = await runProcess(process.execPath, [
+        launcherPath,
+        "--explicit",
+        "--apply-manifest",
+        manifestPath,
+        "--approve-hash",
+        approvedHash,
+        "--target",
+        target,
+      ]);
+      assert.equal(applied.code, 1, `${scenario}: ${applied.stdout}\n${applied.stderr}`);
+      assert.deepEqual(await snapshotTree(target), before, scenario);
+      assert.equal(
+        (await snapshotTree(target)).some((entry) => entry.path.startsWith(".engineering")),
+        false,
+        scenario,
+      );
+    } finally {
+      await rm(sandbox, { recursive: true, force: true });
+    }
+  }
+});
+
+test("one-time override changes only its exact manifest path and action", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-override-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  const overridesPath = path.join(sandbox, "migration-overrides.json");
+  await cp(adversarialFixture, target, { recursive: true });
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    const protectedNeighborBefore = await readFile(path.join(target, "token.json"));
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await writeFile(
+      overridesPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        manifestHash: manifest.hash,
+        overrides: [{ path: "notes.txt", action: "DELETE" }],
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--overrides",
+      overridesPath,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 0, `${applied.stdout}\n${applied.stderr}`);
+    assert.equal(JSON.parse(applied.stdout).status, "PREPARED_PROJECT");
+    assert.equal(await stat(path.join(target, "notes.txt")).catch(() => null), null);
+    assert.deepEqual(await readFile(path.join(target, "token.json")), protectedNeighborBefore);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("rollback token restores the exact tree after a fully applied manifest", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-rollback-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+  const before = await snapshotTree(target);
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 0, applied.stderr);
+    const rollbackToken = JSON.parse(applied.stdout).rollbackToken;
+
+    const rolledBack = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--rollback",
+      rollbackToken,
+      "--target",
+      target,
+    ]);
+    assert.equal(rolledBack.code, 0, `${rolledBack.stdout}\n${rolledBack.stderr}`);
+    assert.equal(JSON.parse(rolledBack.stdout).status, "NORMALIZATION_ROLLED_BACK");
+    assert.deepEqual(await snapshotTree(target), before);
+    assert.equal(await stat(rollbackToken).catch(() => null), null);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("failed post-apply readiness automatically rolls back a partial manifest", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-partial-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "partial-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+  const before = await snapshotTree(target);
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    manifest.actions = manifest.actions.filter(
+      (/** @type {any} */ action) => action.path !== ".engineering/runtime/manifest.json",
+    );
+    manifest.hash = computeMigrationManifestHash(manifest.actions);
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 1, `${applied.stdout}\n${applied.stderr}`);
+    assert.deepEqual(await snapshotTree(target), before);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("override cannot expand the approved manifest to a neighboring path", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-scope-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  const overridesPath = path.join(sandbox, "migration-overrides.json");
+  await cp(adversarialFixture, target, { recursive: true });
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await writeFile(
+      overridesPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        manifestHash: manifest.hash,
+        overrides: [{ path: "neighbor-not-in-manifest.txt", action: "DELETE" }],
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    const before = await snapshotTree(target);
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--overrides",
+      overridesPath,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 1, `${applied.stdout}\n${applied.stderr}`);
+    assert.deepEqual(await snapshotTree(target), before);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("apply executes only listed MOVE, REWRITE, DELETE, and CREATE actions", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-actions-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+  const before = await snapshotTree(target);
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    const rewriteContent = Buffer.from("# Migrated project\n", "utf8");
+    for (const action of manifest.actions) {
+      if (action.path === "README.md") {
+        Object.assign(action, {
+          action: "REWRITE",
+          destructive: true,
+          contentBase64: rewriteContent.toString("base64"),
+          contentSha256: sha256(rewriteContent),
+        });
+      } else if (action.path === "package-lock.json") {
+        Object.assign(action, { action: "DELETE", destructive: true });
+      } else if (action.path === "tsconfig.json") {
+        Object.assign(action, {
+          action: "MOVE",
+          destructive: true,
+          destination: "tsconfig.legacy.json",
+        });
+      }
+    }
+    manifest.destructiveScope = migrationDestructiveScope(manifest.actions);
+    manifest.hash = computeMigrationManifestHash(manifest.actions);
+    assert.deepEqual(validateMigrationManifest(manifest), { valid: true, errors: [] });
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 0, `${applied.stdout}\n${applied.stderr}`);
+    assert.equal(await readFile(path.join(target, "README.md"), "utf8"), "# Migrated project\n");
+    assert.equal(await stat(path.join(target, "package-lock.json")).catch(() => null), null);
+    assert.equal(await stat(path.join(target, "tsconfig.json")).catch(() => null), null);
+    assert.equal(
+      await readFile(path.join(target, "tsconfig.legacy.json"), "utf8"),
+      await readFile(path.join(nodeFixture, "tsconfig.json"), "utf8"),
+    );
+
+    const rollbackToken = JSON.parse(applied.stdout).rollbackToken;
+    const rolledBack = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--rollback",
+      rollbackToken,
+      "--target",
+      target,
+    ]);
+    assert.equal(rolledBack.code, 0, rolledBack.stderr);
+    assert.deepEqual(await snapshotTree(target), before);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("changed protected symlink target is rejected before mutation", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-symlink-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+  const firstTarget = path.join(target, "local-one");
+  const secondTarget = path.join(target, "local-two");
+  const link = path.join(target, ".local-link");
+  await mkdir(firstTarget);
+  await mkdir(secondTarget);
+  await symlink(firstTarget, link, "junction");
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await rm(link);
+    await symlink(secondTarget, link, "junction");
+    const before = await snapshotTree(target);
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 1, `${applied.stdout}\n${applied.stderr}`);
+    assert.match(applied.stderr, /source hash is stale.*\.local-link/iu);
+    assert.deepEqual(await snapshotTree(target), before);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("MOVE may target a parent created by the same approved manifest", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "engineering-loop-move-parent-"));
+  const target = path.join(sandbox, "legacy target");
+  const manifestPath = path.join(sandbox, "migration-manifest.json");
+  await cp(nodeFixture, target, { recursive: true });
+  const before = await snapshotTree(target);
+
+  try {
+    const proposal = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--normalize",
+      "--target",
+      target,
+    ]);
+    assert.equal(proposal.code, 0, proposal.stderr);
+    const manifest = JSON.parse(proposal.stdout).manifest;
+    const readme = manifest.actions.find(
+      (/** @type {any} */ action) => action.path === "README.md",
+    );
+    Object.assign(readme, {
+      action: "MOVE",
+      destructive: true,
+      destination: ".engineering/plans/README.legacy.md",
+    });
+    manifest.destructiveScope = migrationDestructiveScope(manifest.actions);
+    manifest.hash = computeMigrationManifestHash(manifest.actions);
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const applied = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--apply-manifest",
+      manifestPath,
+      "--approve-hash",
+      manifest.hash,
+      "--target",
+      target,
+    ]);
+    assert.equal(applied.code, 0, `${applied.stdout}\n${applied.stderr}`);
+    assert.equal(
+      await readFile(path.join(target, ".engineering", "plans", "README.legacy.md"), "utf8"),
+      await readFile(path.join(nodeFixture, "README.md"), "utf8"),
+    );
+    const rollbackToken = JSON.parse(applied.stdout).rollbackToken;
+    const rolledBack = await runProcess(process.execPath, [
+      launcherPath,
+      "--explicit",
+      "--rollback",
+      rollbackToken,
+      "--target",
+      target,
+    ]);
+    assert.equal(rolledBack.code, 0, rolledBack.stderr);
+    assert.deepEqual(await snapshotTree(target), before);
   } finally {
     await rm(sandbox, { recursive: true, force: true });
   }

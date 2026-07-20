@@ -8,33 +8,7 @@ import {
   migrationDestructiveScope,
   sha256,
 } from "../runtime/contracts.mjs";
-
-const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
-  ".engineering",
-  ".engineering/AGENTS.md",
-  ".engineering/CONTEXT.md",
-  ".engineering/README.md",
-  ".engineering/adrs",
-  ".engineering/adrs/.gitkeep",
-  ".engineering/plans",
-  ".engineering/plans/.gitkeep",
-  ".engineering/runs",
-  ".engineering/runs/.gitkeep",
-  ".engineering/runtime",
-  ".engineering/runtime/contracts.mjs",
-  ".engineering/runtime/engine.mjs",
-  ".engineering/runtime/manifest.json",
-  ".engineering/runtime/methodology.md",
-  ".engineering/runtime/upstream-adoption.json",
-  ".engineering/specs",
-  ".engineering/specs/.gitkeep",
-  ".engineering/state",
-  ".engineering/state/project.json",
-  ".engineering/tickets",
-  ".engineering/tickets/.gitkeep",
-  ".engineering/verification",
-  ".engineering/verification/registry.json",
-]);
+import { CANONICAL_PROJECT_SHELL_PATHS } from "./shell.mjs";
 
 /** @type {readonly { id: string, matches: (candidate: string) => boolean }[]} */
 const CONVENTION_DETECTORS = Object.freeze([
@@ -265,7 +239,8 @@ async function inventoryRepository(target) {
         entries.push({ path: relative, kind: "directory" });
         await visit(absolute);
       } else if (stats.isSymbolicLink()) {
-        entries.push({ path: relative, kind: "symlink", target: await readlink(absolute) });
+        const target = await readlink(absolute);
+        entries.push({ path: relative, kind: "symlink", target, sha256: sha256(target) });
       } else if (stats.isFile()) {
         entries.push({ path: relative, kind: "file", sha256: sha256(await readFile(absolute)) });
       } else {
