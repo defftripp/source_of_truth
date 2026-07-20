@@ -1,0 +1,9 @@
+{
+  "request": "Inspect this project and summarize its current structure.",
+  "explicitInvocation": false,
+  "expected": {
+    "exitCode": 64,
+    "status": "EXPLICIT_INVOCATION_REQUIRED",
+    "probeExecuted": false
+  }
+}

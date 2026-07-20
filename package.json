@@ -1,0 +1,21 @@
+{
+  "name": "codex-engineering-loop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Explicit Global Launcher and read-only readiness probe for Codex Engineering Loop",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --project jsconfig.json",
+    "test": "node --test \"test/unit/*.test.mjs\"",
+    "test:install-smoke": "node --test test/smoke/install.test.mjs",
+    "test:platform-smoke": "node --test test/smoke/platform.test.mjs",
+    "verify": "npm run typecheck && npm test && npm run test:install-smoke && npm run test:platform-smoke"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3"
+  }
+}
