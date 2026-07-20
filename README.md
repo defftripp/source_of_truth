@@ -43,8 +43,26 @@ Subsequent runs delegate only to the installed project-local runtime:
 node <installed-skill>/scripts/readiness.mjs --explicit --run --target <project>
 ```
 
-Replacing the Global Launcher does not replace that pinned runtime. Legacy
-normalization and the full task lifecycle belong to later tickets.
+Replacing the Global Launcher does not replace that pinned runtime. Applying a
+legacy migration and the full task lifecycle belong to later tickets.
+
+## Legacy normalization proposal
+
+For an existing Target Project, request a read-only Migration Manifest before
+any normalization:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --normalize --target <project>
+```
+
+The result is `NORMALIZATION_PROPOSED` with a complete inventory, detected
+conventions and Application Core, explicit `KEEP`, `CREATE`, `MOVE`, `REWRITE`,
+`DELETE`, and `PROTECT` action contracts, rollback guidance, and a deterministic
+SHA-256 hash bound to the proposed action scope. Sensitive, ambiguous, and
+deliberate local paths default to `PROTECT`. The command does not write the
+manifest or otherwise modify the Target Project. Non-directory ancestor
+conflicts suppress unsafe descendant `CREATE` actions and are recorded for
+review. Applying the proposal requires a later Human Gate workflow.
 
 ## Readiness evidence
 
@@ -65,7 +83,8 @@ npm install
 npm run verify
 ```
 
-The verification suite includes schema and checksum contracts, new-project
-structure preservation, black-box delegation and version isolation, metadata
-and negative-invocation checks, an isolated real `npx skills` global-install
-smoke, and a platform smoke. Windows is mandatory for V1.
+The verification suite includes schema and checksum contracts, legacy layout
+inventory and no-mutation checks, adversarial protection, new-project structure
+preservation, black-box delegation and version isolation, metadata and
+negative-invocation checks, an isolated real `npx skills` global-install smoke,
+and a platform smoke. Windows is mandatory for V1.

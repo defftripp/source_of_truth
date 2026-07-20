@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add read-only legacy-project inventory and hash-bound Migration Manifest proposals.
+- Protect sensitive, ambiguous, and deliberate local files before the Human Gate.
 - Add explicit onboarding for a new Target Project and its Canonical Project Shell.
 - Install a self-contained Project Runtime `1.0.0` with manifest and upstream pins.
 - Delegate Engineering Runs to project-owned state and verify launcher/runtime isolation.

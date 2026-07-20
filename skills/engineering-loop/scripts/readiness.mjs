@@ -13,12 +13,12 @@ const RUNTIME_MANIFEST_PATH = ".engineering/runtime/manifest.json";
 
 /**
  * @param {string[]} args
- * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "run" }}
+ * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "run" }}
  */
 export function parseArguments(args) {
   let explicit = false;
   let target = process.cwd();
-  /** @type {"readiness" | "onboard" | "run"} */
+  /** @type {"readiness" | "onboard" | "normalize" | "run"} */
   let operation = "readiness";
 
   for (let index = 0; index < args.length; index += 1) {
@@ -27,11 +27,12 @@ export function parseArguments(args) {
       explicit = true;
       continue;
     }
-    if (argument === "--onboard" || argument === "--run") {
+    if (argument === "--onboard" || argument === "--normalize" || argument === "--run") {
       if (operation !== "readiness") {
         throw new Error("Choose only one launcher operation.");
       }
-      operation = argument === "--onboard" ? "onboard" : "run";
+      operation =
+        argument === "--onboard" ? "onboard" : argument === "--normalize" ? "normalize" : "run";
       continue;
     }
     if (argument === "--target") {
@@ -271,6 +272,16 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   const readiness = await probeReadiness(options.target);
+  if (options.operation === "normalize") {
+    if (readiness.status === "BLOCKED") {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+      return 1;
+    }
+    const normalizer = await import(new URL("./normalize.mjs", import.meta.url).href);
+    const report = await normalizer.proposeNormalization(options.target);
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return 0;
+  }
   if (options.operation === "onboard") {
     if (readiness.status !== "ONBOARDING_REQUIRED") {
       process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
