@@ -4,16 +4,21 @@
     { "id": "prepared-project-smoke", "role": "smoke", "command": ["node", ".engineering/runtime/engine.mjs", "--smoke"] },
     { "id": "repository-research", "role": "research", "command": ["node", "scripts/research.mjs"] },
     { "id": "one-ticket-planner", "role": "planner", "command": ["node", "scripts/planner.mjs"] },
+    { "id": "dependency-graph-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "graph"] },
     { "id": "stale-ticket-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "stale-mutation"] },
     { "id": "advisor-gate", "role": "advisor", "command": ["node", "scripts/advisor.mjs"] },
     { "id": "bounded-worker", "role": "worker", "command": ["node", "scripts/worker.mjs"] },
+    { "id": "restart-worker", "role": "worker", "command": ["node", "scripts/worker.mjs", "restart"] },
     { "id": "ticket-message-test", "role": "ticket-verification", "command": ["node", "scripts/ticket-verification.mjs"] },
     { "id": "spec-review", "role": "spec-review", "command": ["node", "scripts/spec-review.mjs"] },
     { "id": "quality-review", "role": "quality-review", "command": ["node", "scripts/quality-review.mjs"] },
     { "id": "full-test", "role": "test", "requiredForFast": false, "command": ["node", "--test", "test/message.test.mjs"] },
+    { "id": "graph-full-test", "role": "test", "requiredForFast": false, "command": ["node", "--test", "test/message.test.mjs", "test/audience.test.mjs", "test/punctuation.test.mjs"] },
     { "id": "typecheck", "role": "typecheck", "requiredForFast": false, "command": ["node", "--check", "src/message.mjs"] },
     { "id": "build", "role": "build", "requiredForFast": false, "command": ["node", "scripts/build.mjs"] },
+    { "id": "graph-build", "role": "build", "requiredForFast": false, "command": ["node", "scripts/graph-build.mjs"] },
     { "id": "observed-behavior", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/observe.mjs"] },
+    { "id": "graph-observed-behavior", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/graph-observe.mjs"] },
     { "id": "stale-mutation", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/stale-mutation.mjs"] }
   ]
 }

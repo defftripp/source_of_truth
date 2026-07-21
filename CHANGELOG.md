@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Execute multi-ticket STANDARD graphs blockers-first with a deterministic frontier and one fresh Root checkpoint per vertical ticket.
+- Persist ticket-specific Context Packets, exclusive Write Leases, graph progress, attempts, and checkpoint evidence so interrupted runs resume without chat history.
 - Execute a one-ticket STANDARD lifecycle through repository research, spec-lite, complete Planner coverage, and a strict Advisor Gate.
 - Constrain the STANDARD Worker to a bounded Context Packet and Write Lease while Root owns fresh verification and checkpoint commits.
 - Run independent Spec and Quality reviews and reject stale ticket evidence before READY_FOR_HUMAN.

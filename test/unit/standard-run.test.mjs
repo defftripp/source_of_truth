@@ -4,6 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  checkpointCommitsInExecutionOrder,
+  selectDeterministicFrontier,
+} from "../../skills/engineering-loop/runtime/engine.mjs";
 import { runProcess } from "../support/process.mjs";
 import { snapshotTree } from "../support/snapshot.mjs";
 
@@ -11,6 +15,29 @@ const fixturePath = fileURLToPath(new URL("../fixtures/standard-run", import.met
 const onboardingPath = fileURLToPath(
   new URL("../../skills/engineering-loop/scripts/onboard.mjs", import.meta.url),
 );
+
+test("STANDARD frontier and checkpoint order are locale-independent and graph-ordered", () => {
+  const frontier = selectDeterministicFrontier(
+    [
+      { id: "ticket_a", dependencies: [] },
+      { id: "Ticket-Z", dependencies: [] },
+      { id: "ticket-a", dependencies: [] },
+    ],
+    new Set(),
+  );
+  assert.deepEqual(frontier.map((ticket) => ticket.id), ["Ticket-Z", "ticket-a", "ticket_a"]);
+  assert.deepEqual(
+    checkpointCommitsInExecutionOrder({
+      executionOrder: ["TICKET-B", "TICKET-Z", "TICKET-A"],
+      tickets: [
+        { id: "TICKET-A", checkpointCommit: "commit-a" },
+        { id: "TICKET-B", checkpointCommit: "commit-b" },
+        { id: "TICKET-Z", checkpointCommit: "commit-z" },
+      ],
+    }),
+    ["commit-b", "commit-z", "commit-a"],
+  );
+});
 
 test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecycle", async () => {
   const prepared = await prepareTarget("success");
@@ -41,6 +68,7 @@ test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecy
         "ADVISOR_GATE",
         "IMPLEMENTING",
         "TICKET_VERIFICATION",
+        "CHECKPOINT",
         "SPEC_REVIEW",
         "QUALITY_REVIEW",
         "FULL_VERIFICATION",
@@ -80,6 +108,7 @@ test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecy
         "spec-review.json",
         "state.json",
         "task-profile.json",
+        "ticket-graph.json",
         "ticket.json",
         "verification.json",
       ],
@@ -108,7 +137,134 @@ test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecy
   }
 });
 
-test("STANDARD refuses a Root checkpoint when ticket verification evidence is stale", async () => {
+test("multi-ticket STANDARD executes a deterministic blockers-first graph with fresh checkpoints", async () => {
+  const prepared = await prepareTarget("dependency-graph");
+  try {
+    const result = await invokeRun(prepared.target, "graph-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, "");
+    const report = JSON.parse(result.stdout);
+
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.deepEqual(report.executionOrder, ["TICKET-1", "TICKET-2", "TICKET-3"]);
+    assert.equal(report.run.workerCount, 3);
+    assert.equal(report.run.checkpointCommits.length, 3);
+    assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
+    assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
+
+    const artifactRoot = path.join(report.run.worktree, ...report.run.artifactPath.split("/"));
+    const graph = JSON.parse(await readFile(path.join(artifactRoot, "ticket-graph.json"), "utf8"));
+    assert.deepEqual(graph.executionOrder, ["TICKET-1", "TICKET-2", "TICKET-3"]);
+    assert.deepEqual(
+      graph.tickets.map((/** @type {any} */ ticket) => ({
+        id: ticket.id,
+        blockers: ticket.dependencies,
+        status: ticket.status,
+      })),
+      [
+        { id: "TICKET-1", blockers: [], status: "COMPLETE" },
+        { id: "TICKET-2", blockers: ["TICKET-1"], status: "COMPLETE" },
+        { id: "TICKET-3", blockers: ["TICKET-1"], status: "COMPLETE" },
+      ],
+    );
+
+    /** @type {Record<string, string[]>} */
+    const expectedLeases = {
+      "TICKET-1": ["src/message.mjs"],
+      "TICKET-2": ["src/audience.mjs"],
+      "TICKET-3": ["src/punctuation.mjs"],
+    };
+    for (const ticket of graph.tickets) {
+      assert.match(ticket.checkpointCommit, /^[a-f0-9]{40}$/u);
+      assert.ok(Number.isInteger(ticket.verification.verifiedAtEpochSeconds));
+      const commitEpoch = Number(await git(prepared.target, "show", "-s", "--format=%ct", ticket.checkpointCommit));
+      assert.ok(commitEpoch >= ticket.verification.verifiedAtEpochSeconds);
+      const packet = await gitShowJson(
+        prepared.target,
+        ticket.checkpointCommit,
+        `${report.run.artifactPath}/context-packet.json`,
+      );
+      assert.equal(packet.ticketId, ticket.id);
+      assert.deepEqual(packet.writeLease, expectedLeases[ticket.id]);
+      assert.equal("chat" in packet, false);
+      assert.equal("conversation" in packet, false);
+    }
+
+    const checkpointSubjects = (
+      await git(prepared.target, "log", "--reverse", "--format=%s", `${prepared.developBefore}..${report.run.head}`)
+    ).split(/\r?\n/u);
+    assert.deepEqual(checkpointSubjects.slice(0, 3).map((/** @type {string} */ subject) => subject.match(/TICKET-\d/u)?.[0]), [
+      "TICKET-1",
+      "TICKET-2",
+      "TICKET-3",
+    ]);
+    assert.match(checkpointSubjects.at(-1), /record STANDARD run readiness/iu);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("interrupted STANDARD graph resumes from durable state without chat history", async () => {
+  const prepared = await prepareTarget("dependency-graph-resume");
+  try {
+    const interrupted = await invokeRun(prepared.target, "restart-request.json");
+    assert.notEqual(interrupted.code, 0);
+
+    const branches = (
+      await git(prepared.target, "for-each-ref", "--format=%(refname:short)", "refs/heads/run/standard/")
+    ).split(/\r?\n/u).filter(Boolean);
+    assert.equal(branches.length, 1);
+    const runId = branches[0].split("/").at(-1);
+    assert.ok(runId);
+    const interruptedWorktree = `${prepared.target}.engineering-worktrees/${runId}`;
+    const interruptedGraph = JSON.parse(
+      await readFile(
+        path.join(interruptedWorktree, ".engineering", "runs", runId, "ticket-graph.json"),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(interruptedGraph.executionOrder, ["TICKET-1"]);
+    assert.equal(interruptedGraph.tickets.find((/** @type {any} */ ticket) => ticket.id === "TICKET-2").attempts, 1);
+
+    const committedGraph = await gitShowJson(
+      prepared.target,
+      branches[0],
+      `.engineering/runs/${runId}/ticket-graph.json`,
+    );
+    assert.equal(
+      committedGraph.tickets.find((/** @type {any} */ ticket) => ticket.id === "TICKET-1").status,
+      "IN_PROGRESS",
+    );
+    await writeFile(
+      path.join(interruptedWorktree, ".engineering", "runs", runId, "ticket-graph.json"),
+      `${JSON.stringify(committedGraph, null, 2)}\n`,
+      "utf8",
+    );
+
+    const postCommitRestart = await invokeRun(prepared.target, "restart-request.json");
+    assert.notEqual(postCommitRestart.code, 0);
+    const resumed = await invokeRun(prepared.target, "restart-request.json");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.run.id, runId);
+    assert.equal(report.run.branch, branches[0]);
+    assert.deepEqual(report.executionOrder, ["TICKET-1", "TICKET-2", "TICKET-3"]);
+    assert.deepEqual(report.run.checkpointCommits.slice(0, 1), [interruptedGraph.tickets[0].checkpointCommit]);
+    const finalGraph = JSON.parse(
+      await readFile(
+        path.join(report.run.worktree, ...report.run.artifactPath.split("/"), "ticket-graph.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(finalGraph.tickets.find((/** @type {any} */ ticket) => ticket.id === "TICKET-2").attempts, 2);
+    assert.ok(report.stateHistory.some((/** @type {any} */ entry) => entry.state === "RESUMED"));
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("STANDARD blocks readiness when final verification makes checkpoint evidence stale", async () => {
   const prepared = await prepareTarget("stale-evidence");
   try {
     const result = await invokeRun(prepared.target, "stale-evidence-request.json");
@@ -124,9 +280,9 @@ test("STANDARD refuses a Root checkpoint when ticket verification evidence is st
       role: "schema",
       exitCode: 1,
     });
-    assert.equal(report.run.checkpointCommit, null);
-    assert.equal(report.run.head, prepared.developBefore);
-    assert.equal(await git(prepared.target, "rev-parse", report.run.branch), prepared.developBefore);
+    assert.match(report.run.checkpointCommit, /^[a-f0-9]{40}$/u);
+    assert.equal(report.run.head, report.run.checkpointCommit);
+    assert.equal(await git(prepared.target, "rev-parse", report.run.branch), report.run.checkpointCommit);
     assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
     assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
   } finally {
@@ -171,7 +327,7 @@ test("STANDARD blocks when one independent reviewer does not verify its review p
     assert.equal(report.status, "BLOCKED");
     assert.equal(report.failure.stage, "QUALITY_REVIEW");
     assert.equal(report.failure.checkId, "quality-review-schema");
-    assert.equal(report.run.checkpointCommit, null);
+    assert.match(report.run.checkpointCommit, /^[a-f0-9]{40}$/u);
     const artifactRoot = path.join(report.run.worktree, ...report.run.artifactPath.split("/"));
     assert.ok((await readFile(path.join(artifactRoot, "spec-review.json"), "utf8")).includes("SPEC_REVIEWER"));
   } finally {
@@ -219,4 +375,9 @@ async function git(cwd, ...args) {
   const result = await runProcess("git", args, { cwd });
   assert.equal(result.code, 0, `git ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
   return result.stdout.trim();
+}
+
+/** @param {string} cwd @param {string} revision @param {string} projectPath */
+async function gitShowJson(cwd, revision, projectPath) {
+  return JSON.parse(await git(cwd, "show", `${revision}:${projectPath}`));
 }

@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -28,6 +28,7 @@ const RUN_ARTIFACT_FILES = new Set([
   "state.json",
   "task-profile.json",
   "ticket.json",
+  "ticket-graph.json",
   "verification.json",
 ]);
 const DENIED_ARTIFACT_KEYS = new Set([
@@ -553,20 +554,31 @@ async function runStandardTask(target, prepared, request) {
   );
   const commands = resolveStandardCommands(prepared.registry, request.commands);
   const taskProfile = buildTaskProfile(prepared, request, repository);
-  const runId = createRunId();
-  const branch = `run/standard/${runId}`;
   const worktreeRoot = `${target}.engineering-worktrees`;
+  const requestHash = sha256(JSON.stringify(request));
+  const resumable = await findResumableStandardRun(
+    worktreeRoot,
+    requestHash,
+    repository.integrationHead,
+  );
+  const runId = resumable?.runId ?? createRunId();
+  const branch = resumable?.branch ?? `run/standard/${runId}`;
   const worktree = path.join(worktreeRoot, runId);
   const artifactPath = `.engineering/runs/${runId}`;
   const artifactRoot = path.join(worktree, ...artifactPath.split("/"));
   /** @type {{ sequence: number, state: string, status: string }[]} */
-  const stateHistory = [];
+  const stateHistory = resumable?.state.history ?? [];
   /** @type {{ schemaVersion: number, checks: any[] }} */
-  const verification = { schemaVersion: 1, checks: [] };
-  const artifacts = {};
+  const verification = resumable?.verification ?? { schemaVersion: 1, checks: [] };
+  const artifacts = /** @type {Record<string, any>} */ (resumable?.artifacts ?? {});
+  let specLite;
+  let planned;
+  /** @type {Record<string, any>} */
+  let ticketGraph;
+  let advisor;
   await mkdir(worktreeRoot, { recursive: true });
   const commandGuard = await createGitCommandGuard(worktreeRoot, runId, target);
-  const context = {
+  const context = /** @type {Record<string, any>} */ ({
     target,
     taskProfile,
     repository,
@@ -581,10 +593,16 @@ async function runStandardTask(target, prepared, request) {
     commandGuard,
     artifacts,
     mode: "STANDARD",
+    workerCount: resumable?.graph.tickets.reduce(
+      (/** @type {number} */ total, /** @type {any} */ ticket) => total + ticket.attempts,
+      0,
+    ) ?? 0,
+    checkpointCommits: resumable ? checkpointCommitsInExecutionOrder(resumable.graph) : [],
     blocker: blockStandardRun,
-  };
+  });
 
   try {
+    if (!resumable) {
     transitionState(stateHistory, "CLASSIFIED");
     await git(target, ["worktree", "add", "-b", branch, worktree, repository.integrationHead]);
     await initializeCommandGuard(commandGuard, worktree, repository, branch);
@@ -619,7 +637,7 @@ async function runStandardTask(target, prepared, request) {
     await writeJson(path.join(artifactRoot, "research.json"), research);
 
     transitionState(stateHistory, "SPEC_LITE");
-    const specLite = {
+    specLite = {
       schemaVersion: 1,
       taskSummary: request.task.summary,
       evidenceBackedFacts: research.facts.map((/** @type {any} */ fact) => fact.id),
@@ -637,21 +655,35 @@ async function runStandardTask(target, prepared, request) {
     if (plannerExecution.result.exitCode !== 0) {
       return blockStandardAfterCommand(context, "TICKET_PLANNING", commands.planner, plannerExecution.result);
     }
-    let planned;
     try {
       planned = parseExecutionPlan(plannerExecution.result.stdout, request, commands);
     } catch {
       return blockStandardSchema(context, "TICKET_PLANNING", "acceptance-coverage");
     }
-    const ticketArtifact = { schemaVersion: 1, ...planned.ticket };
-    artifacts["ticket.json"] = ticketArtifact;
-    await writeJson(path.join(artifactRoot, "ticket.json"), ticketArtifact);
+    ticketGraph = /** @type {Record<string, any>} */ ({
+      schemaVersion: 1,
+      runId,
+      branch,
+      baseCommit: repository.integrationHead,
+      requestHash,
+      executionOrder: [],
+      tickets: planned.tickets.map((ticket) => ({
+        ...ticket,
+        status: "OPEN",
+        attempts: 0,
+        verification: null,
+        checkpointCommit: null,
+        checkpointedAt: null,
+      })),
+    });
+    artifacts["ticket-graph.json"] = ticketGraph;
+    await writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph);
 
     transitionState(stateHistory, "ADVISOR_GATE");
     const expectedAdvisorEvidence = advisorEvidence(planned);
     const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
       ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
-      ENGINEERING_ADVISOR_TICKETS: JSON.stringify([planned.ticket.id]),
+      ENGINEERING_ADVISOR_TICKETS: JSON.stringify(planned.tickets.map((ticket) => ticket.id)),
     });
     if (advisorExecution.blocked) {
       return advisorExecution.blocked;
@@ -659,11 +691,10 @@ async function runStandardTask(target, prepared, request) {
     if (advisorExecution.result.exitCode !== 0) {
       return blockStandardAfterCommand(context, "ADVISOR_GATE", commands.advisor, advisorExecution.result);
     }
-    let advisor;
     try {
       advisor = parseAdvisor(
         advisorExecution.result.stdout,
-        planned.ticket.id,
+        planned.tickets.map((ticket) => ticket.id),
         expectedAdvisorEvidence,
       );
     } catch {
@@ -671,74 +702,240 @@ async function runStandardTask(target, prepared, request) {
     }
     artifacts["advisor.json"] = advisor;
     await writeJson(path.join(artifactRoot, "advisor.json"), advisor);
-
-    const contextPacket = {
-      schemaVersion: 1,
-      ticketId: planned.ticket.id,
-      taskSummary: request.task.summary,
-      factIds: specLite.evidenceBackedFacts,
-      acceptanceCriteria: planned.ticket.acceptanceCriteria,
-      verificationIds: planned.ticket.verificationIds,
-      contextPaths: planned.ticket.contextPaths,
-      writeLease: planned.ticket.writeLease,
-      rootWriter: false,
-      workerMayCommit: false,
-      workerMaySpawnSubagents: false,
-    };
-    artifacts["context-packet.json"] = contextPacket;
-    const contextPacketPath = path.join(artifactRoot, "context-packet.json");
-    await writeJson(contextPacketPath, contextPacket);
-
-    transitionState(stateHistory, "IMPLEMENTING");
-    const workerExecution = await executeRunCommand(context, commands.worker, undefined, {
-      ENGINEERING_CONTEXT_PACKET: contextPacketPath,
-      ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
-      ENGINEERING_WORKER_MAY_COMMIT: "0",
-      ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
-    });
-    if (workerExecution.blocked) {
-      return workerExecution.blocked;
-    }
-    if (workerExecution.result.exitCode !== 0) {
-      return blockStandardAfterCommand(context, "IMPLEMENTING", commands.worker, workerExecution.result);
-    }
-    let workerVerification;
-    try {
-      workerVerification = parseWorkerVerification(
-        workerExecution.result.stdout,
-        commands.ticketVerification.id,
+    } else {
+      await git(worktree, ["reset", "--hard", "HEAD"]);
+      await git(worktree, ["clean", "-fd"]);
+      await initializeCommandGuard(commandGuard, worktree, repository, branch);
+      transitionState(stateHistory, "RESUMED");
+      ticketGraph = resumable.graph;
+      for (const ticket of ticketGraph.tickets) {
+        if (ticket.status === "IN_PROGRESS") {
+          ticket.status = "OPEN";
+        }
+      }
+      specLite = artifacts["spec-lite.json"];
+      planned = parseExecutionPlan(
+        JSON.stringify({
+          schemaVersion: 1,
+          tickets: ticketGraph.tickets.map(ticketContract),
+        }),
+        request,
+        commands,
       );
-    } catch {
-      return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
-    }
-    verification.checks.push(workerVerification);
-    const workerChanges = await changedPaths(worktree, repository.integrationHead);
-    const workerScopeLeak = workerChanges.find(
-      (changedPath) =>
-        !request.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
-    );
-    if (workerScopeLeak) {
-      return blockStandardSchema(context, "IMPLEMENTING", "write-lease");
+      validateDurableExecutionOrder(ticketGraph);
+      advisor = parseAdvisor(
+        JSON.stringify(artifacts["advisor.json"]),
+        planned.tickets.map((ticket) => ticket.id),
+        advisorEvidence(planned),
+      );
+      artifacts["ticket-graph.json"] = ticketGraph;
+      await mkdir(artifactRoot, { recursive: true });
+      await Promise.all([
+        ...Object.entries(artifacts).map(([name, value]) =>
+          writeJson(path.join(artifactRoot, name), value),
+        ),
+        writeJson(path.join(artifactRoot, "task-profile.json"), taskProfile),
+        writeJson(path.join(artifactRoot, "verification.json"), verification),
+        writeRunState(
+          artifactRoot,
+          runId,
+          branch,
+          repository.integrationHead,
+          stateHistory,
+          false,
+          "STANDARD",
+        ),
+      ]);
     }
 
-    transitionState(stateHistory, "TICKET_VERIFICATION");
-    const ticketExecution = await executeRunCommand(context, commands.ticketVerification);
-    if (ticketExecution.blocked) {
-      return ticketExecution.blocked;
-    }
-    const ticketEvidence = {
-      ...commandEvidence(commands.ticketVerification, ticketExecution.result),
-      observedLease: await leaseFingerprint(worktree, request.writeLease),
-    };
-    verification.checks.push(ticketEvidence);
-    await writeJson(path.join(artifactRoot, "verification.json"), verification);
-    if (ticketExecution.result.exitCode !== 0) {
-      return blockStandardAfterCommand(
+    while (ticketGraph.tickets.some((/** @type {any} */ ticket) => ticket.status !== "COMPLETE")) {
+      const frontier = selectDeterministicFrontier(
+        ticketGraph.tickets,
+        new Set(
+          ticketGraph.tickets
+            .filter((/** @type {any} */ ticket) => ticket.status === "COMPLETE")
+            .map((/** @type {any} */ ticket) => ticket.id),
+        ),
+      );
+      if (frontier.length === 0) {
+        return blockStandardSchema(context, "IMPLEMENTING", "ticket-frontier");
+      }
+      const ticket = frontier[0];
+      ticket.status = "IN_PROGRESS";
+      ticket.attempts += 1;
+      context.writeLease = ticket.writeLease;
+      context.workerCount += 1;
+      const ticketArtifact = {
+        schemaVersion: 1,
+        id: ticket.id,
+        objective: ticket.objective,
+        acceptanceCriteria: ticket.acceptanceCriteria,
+        verificationIds: ticket.verificationIds,
+        dependencies: ticket.dependencies,
+        writeLease: ticket.writeLease,
+        contextPaths: ticket.contextPaths,
+      };
+      artifacts["ticket.json"] = ticketArtifact;
+      const contextPacket = {
+        schemaVersion: 1,
+        ticketId: ticket.id,
+        attempt: ticket.attempts,
+        taskSummary: request.task.summary,
+        factIds: specLite.evidenceBackedFacts,
+        acceptanceCriteria: ticket.acceptanceCriteria,
+        verificationIds: ticket.verificationIds,
+        contextPaths: ticket.contextPaths,
+        writeLease: ticket.writeLease,
+        rootWriter: false,
+        workerMayCommit: false,
+        workerMaySpawnSubagents: false,
+      };
+      artifacts["context-packet.json"] = contextPacket;
+      const contextPacketPath = path.join(artifactRoot, "context-packet.json");
+      await Promise.all([
+        writeJson(path.join(artifactRoot, "ticket.json"), ticketArtifact),
+        writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph),
+        writeJson(contextPacketPath, contextPacket),
+        writeRunState(
+          artifactRoot,
+          runId,
+          branch,
+          repository.integrationHead,
+          stateHistory,
+          false,
+          "STANDARD",
+        ),
+      ]);
+
+      transitionState(stateHistory, "IMPLEMENTING");
+      const ticketBase = await git(worktree, ["rev-parse", "HEAD"]);
+      const workerExecution = await executeRunCommand(context, commands.worker, undefined, {
+        ENGINEERING_CONTEXT_PACKET: contextPacketPath,
+        ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
+        ENGINEERING_WORKER_MAY_COMMIT: "0",
+        ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
+      });
+      if (workerExecution.blocked) {
+        return workerExecution.blocked;
+      }
+      if (workerExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "IMPLEMENTING",
+          commands.worker,
+          workerExecution.result,
+        );
+      }
+      let workerVerification;
+      try {
+        workerVerification = parseWorkerVerification(
+          workerExecution.result.stdout,
+          commands.ticketVerification.id,
+        );
+      } catch {
+        return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
+      }
+      verification.checks.push({ ...workerVerification, ticketId: ticket.id, attempt: ticket.attempts });
+      const workerChanges = await changedPaths(worktree, ticketBase);
+      const workerScopeLeak = workerChanges.find(
+        (changedPath) =>
+          !ticket.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+      );
+      if (workerScopeLeak) {
+        return blockStandardSchema(context, "IMPLEMENTING", "write-lease");
+      }
+      if (!workerChanges.some((changedPath) => ticket.writeLease.includes(changedPath))) {
+        return blockStandardSchema(context, "IMPLEMENTING", "vertical-ticket-change");
+      }
+
+      transitionState(stateHistory, "TICKET_VERIFICATION");
+      const ticketExecution = await executeRunCommand(
         context,
-        "TICKET_VERIFICATION",
         commands.ticketVerification,
-        ticketExecution.result,
+        undefined,
+        { ENGINEERING_CONTEXT_PACKET: contextPacketPath },
       );
+      if (ticketExecution.blocked) {
+        return ticketExecution.blocked;
+      }
+      const ticketEvidence = {
+        ...commandEvidence(commands.ticketVerification, ticketExecution.result),
+        ticketId: ticket.id,
+        attempt: ticket.attempts,
+        verifiedAtEpochSeconds: Math.floor(Date.now() / 1000),
+        observedLease: await leaseFingerprint(worktree, ticket.writeLease),
+      };
+      verification.checks.push(ticketEvidence);
+      ticket.verification = ticketEvidence;
+      await writeJson(path.join(artifactRoot, "verification.json"), verification);
+      if (ticketExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "TICKET_VERIFICATION",
+          commands.ticketVerification,
+          ticketExecution.result,
+        );
+      }
+      if (
+        JSON.stringify(ticketEvidence.observedLease) !==
+        JSON.stringify(await leaseFingerprint(worktree, ticket.writeLease))
+      ) {
+        return blockStandardSchema(context, "TICKET_VERIFICATION", "verification-freshness");
+      }
+
+      transitionState(stateHistory, "CHECKPOINT");
+      const checkpointArtifacts = {
+        ...artifacts,
+        "state.json": runStateArtifact(
+          runId,
+          branch,
+          repository.integrationHead,
+          stateHistory,
+          false,
+          "STANDARD",
+        ),
+        "task-profile.json": taskProfile,
+        "ticket-graph.json": ticketGraph,
+        "verification.json": verification,
+      };
+      await Promise.all(
+        Object.entries(checkpointArtifacts).map(([name, value]) =>
+          writeJson(path.join(artifactRoot, name), value),
+        ),
+      );
+      await validateRunArtifacts(artifactRoot, checkpointArtifacts);
+      await git(worktree, ["add", "--all"]);
+      await validateGitArtifacts(worktree, "index", artifactPath, checkpointArtifacts);
+      await validateLeasedIndex(worktree, ticket.writeLease);
+      const checkpointTree = await git(worktree, ["write-tree"]);
+      await git(worktree, [
+        "-c",
+        `core.hooksPath=${commandGuard.emptyHooks}`,
+        "commit",
+        "-m",
+        `feat: complete STANDARD ticket ${ticket.id} (${runId})`,
+      ]);
+      const checkpointCommit = await git(worktree, ["rev-parse", "HEAD"]);
+      await validateCommittedTree(worktree, checkpointCommit, checkpointTree);
+      await validateGitArtifacts(worktree, checkpointCommit, artifactPath, checkpointArtifacts);
+      ticket.status = "COMPLETE";
+      ticket.checkpointCommit = checkpointCommit;
+      ticket.checkpointedAt = await git(worktree, ["show", "-s", "--format=%cI", checkpointCommit]);
+      ticketGraph.executionOrder.push(ticket.id);
+      context.checkpointCommits.push(checkpointCommit);
+      artifacts["ticket-graph.json"] = ticketGraph;
+      await Promise.all([
+        writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph),
+        writeRunState(
+          artifactRoot,
+          runId,
+          branch,
+          repository.integrationHead,
+          stateHistory,
+          false,
+          "STANDARD",
+        ),
+      ]);
     }
 
     transitionState(stateHistory, "SPEC_REVIEW");
@@ -816,11 +1013,13 @@ async function runStandardTask(target, prepared, request) {
         return blockStandardAfterCommand(context, "FULL_VERIFICATION", command, execution.result);
       }
     }
-    if (
-      JSON.stringify(ticketEvidence.observedLease) !==
-      JSON.stringify(await leaseFingerprint(worktree, request.writeLease))
-    ) {
-      return blockStandardSchema(context, "FULL_VERIFICATION", "verification-freshness");
+    for (const ticket of ticketGraph.tickets) {
+      if (
+        JSON.stringify(ticket.verification?.observedLease) !==
+        JSON.stringify(await leaseFingerprint(worktree, ticket.writeLease))
+      ) {
+        return blockStandardSchema(context, "FULL_VERIFICATION", "verification-freshness");
+      }
     }
 
     const implementationChanges = await changedPaths(worktree, repository.integrationHead);
@@ -848,26 +1047,10 @@ async function runStandardTask(target, prepared, request) {
       "task-profile.json": taskProfile,
       "verification.json": verification,
     };
-    await Promise.all(
-      Object.entries(checkpointArtifacts).map(([name, value]) =>
-        writeJson(path.join(artifactRoot, name), value),
-      ),
-    );
-    await validateRunArtifacts(artifactRoot, checkpointArtifacts);
-    await git(worktree, ["add", "--all"]);
-    await validateGitArtifacts(worktree, "index", artifactPath, checkpointArtifacts);
-    await validateLeasedIndex(worktree, request.writeLease);
-    const checkpointTree = await git(worktree, ["write-tree"]);
-    await git(worktree, [
-      "-c",
-      `core.hooksPath=${commandGuard.emptyHooks}`,
-      "commit",
-      "-m",
-      `feat: complete STANDARD ticket (${runId})`,
-    ]);
-    const checkpointCommit = await git(worktree, ["rev-parse", "HEAD"]);
-    await validateCommittedTree(worktree, checkpointCommit, checkpointTree);
-    await validateGitArtifacts(worktree, checkpointCommit, artifactPath, checkpointArtifacts);
+    const checkpointCommit = context.checkpointCommits.at(-1);
+    if (!checkpointCommit) {
+      throw new Error("STANDARD graph completed without a checkpoint commit.");
+    }
 
     const readyStateHistory = [...stateHistory];
     transitionState(readyStateHistory, "READY_FOR_HUMAN");
@@ -881,6 +1064,7 @@ async function runStandardTask(target, prepared, request) {
       branch,
       baseCommit: repository.integrationHead,
       checkpointCommit,
+      checkpointCommits: context.checkpointCommits,
       aggregateDiff: durableAggregateDiff(
         await aggregateDiff(worktree, repository.integrationHead, checkpointCommit),
       ),
@@ -928,6 +1112,7 @@ async function runStandardTask(target, prepared, request) {
       taskProfile,
       stateHistory,
       coverage: planned.coverage,
+      executionOrder: ticketGraph.executionOrder,
       advisor,
       specReview,
       qualityReview,
@@ -940,7 +1125,8 @@ async function runStandardTask(target, prepared, request) {
         repository.integrationHead,
         checkpointCommit,
         head,
-        1,
+        context.workerCount,
+        context.checkpointCommits,
       ),
       aggregateDiff: await aggregateDiff(worktree, repository.integrationHead, head),
     };
@@ -1131,9 +1317,10 @@ async function blockStandardRun(context) {
       context.worktree,
       context.artifactPath,
       context.repository.integrationHead,
-      null,
+      context.checkpointCommits?.at(-1) ?? null,
       head,
-      1,
+      context.workerCount ?? 0,
+      context.checkpointCommits ?? [],
     ),
   };
 }
@@ -1650,6 +1837,189 @@ async function cleanupCommandGuard(guard) {
   }
 }
 
+/** @param {string} worktreeRoot @param {string} requestHash @param {string} baseCommit */
+async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
+  let entries;
+  try {
+    entries = await readdir(worktreeRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+  const candidates = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isSafeEvidenceId(entry.name)) {
+      continue;
+    }
+    const runId = entry.name;
+    const worktree = path.join(worktreeRoot, runId);
+    const artifactRoot = path.join(worktree, ".engineering", "runs", runId);
+    try {
+      const [graph, state, verification] = await Promise.all([
+        readJson(path.join(artifactRoot, "ticket-graph.json")),
+        readJson(path.join(artifactRoot, "state.json")),
+        readJson(path.join(artifactRoot, "verification.json")),
+      ]);
+      if (
+        state.mode !== "STANDARD" ||
+        state.terminal !== false ||
+        graph.schemaVersion !== 1 ||
+        graph.runId !== runId ||
+        graph.requestHash !== requestHash ||
+        graph.baseCommit !== baseCommit ||
+        !isSafeBranchName(graph.branch) ||
+        !Array.isArray(graph.tickets) ||
+        !Array.isArray(graph.executionOrder)
+      ) {
+        continue;
+      }
+      const [head, currentBranch] = await Promise.all([
+        git(worktree, ["rev-parse", "HEAD"]),
+        git(worktree, ["branch", "--show-current"]),
+      ]);
+      if (currentBranch !== graph.branch) {
+        throw new Error(`Resumable STANDARD worktree ${runId} is on an unexpected branch.`);
+      }
+      await reconcileCheckpointFromHead(graph, head, baseCommit, worktree, artifactRoot);
+      const completedCommits = checkpointCommitsInExecutionOrder(graph);
+      if ((completedCommits.at(-1) ?? baseCommit) !== head) {
+        throw new Error(`Resumable STANDARD worktree ${runId} does not match its durable checkpoint.`);
+      }
+      const artifacts = /** @type {Record<string, any>} */ ({});
+      for (const name of [
+        "advisor.json",
+        "context-packet.json",
+        "research.json",
+        "spec-lite.json",
+        "ticket-graph.json",
+        "ticket.json",
+      ]) {
+        artifacts[name] = await readJson(path.join(artifactRoot, name));
+      }
+      candidates.push({ runId, branch: graph.branch, graph, state, verification, artifacts });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (candidates.length > 1) {
+    throw new Error("Multiple resumable STANDARD runs match the same request.");
+  }
+  return candidates[0] ?? null;
+}
+
+/** @param {Record<string, any>} ticket */
+function ticketContract(ticket) {
+  return {
+    id: ticket.id,
+    objective: ticket.objective,
+    acceptanceCriteria: ticket.acceptanceCriteria,
+    verificationIds: ticket.verificationIds,
+    dependencies: ticket.dependencies,
+    writeLease: ticket.writeLease,
+    contextPaths: ticket.contextPaths,
+  };
+}
+
+/** @param {string} left @param {string} right */
+function compareEvidenceIds(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * @param {Record<string, any>[]} tickets
+ * @param {Set<string>} completed
+ */
+export function selectDeterministicFrontier(tickets, completed) {
+  return tickets
+    .filter(
+      (ticket) =>
+        !completed.has(ticket.id) &&
+        ticket.dependencies.every((/** @type {string} */ blocker) => completed.has(blocker)),
+    )
+    .sort((left, right) => compareEvidenceIds(left.id, right.id));
+}
+
+/** @param {Record<string, any>} graph */
+export function checkpointCommitsInExecutionOrder(graph) {
+  return graph.executionOrder.map((/** @type {string} */ ticketId) => {
+    const checkpoint = graph.tickets.find(
+      (/** @type {any} */ ticket) => ticket.id === ticketId,
+    )?.checkpointCommit;
+    if (!isNonEmptyString(checkpoint)) {
+      throw new Error(`Durable STANDARD checkpoint is missing for ${ticketId}.`);
+    }
+    return checkpoint;
+  });
+}
+
+/** @param {Record<string, any>} graph @param {string} head @param {string} baseCommit @param {string} worktree @param {string} artifactRoot */
+async function reconcileCheckpointFromHead(graph, head, baseCommit, worktree, artifactRoot) {
+  const completedCommits = checkpointCommitsInExecutionOrder(graph);
+  const previous = completedCommits.at(-1) ?? baseCommit;
+  if (previous === head) {
+    return;
+  }
+  const parents = (await git(worktree, ["show", "-s", "--format=%P", head])).split(" ");
+  const candidates = graph.tickets.filter(
+    (/** @type {any} */ ticket) =>
+      ticket.status === "IN_PROGRESS" &&
+      ticket.verification?.status === "PASS" &&
+      !ticket.checkpointCommit,
+  );
+  if (parents.length !== 1 || parents[0] !== previous || candidates.length !== 1) {
+    throw new Error(`Resumable STANDARD worktree ${graph.runId} does not match its durable checkpoint.`);
+  }
+  const ticket = candidates[0];
+  const subject = await git(worktree, ["show", "-s", "--format=%s", head]);
+  const committedGraph = JSON.parse(
+    await git(
+      worktree,
+      ["show", `${head}:${path.relative(worktree, path.join(artifactRoot, "ticket-graph.json")).replaceAll("\\", "/")}`],
+    ),
+  );
+  const committedTicket = committedGraph.tickets.find(
+    (/** @type {any} */ candidate) => candidate.id === ticket.id,
+  );
+  if (
+    !subject.includes(`complete STANDARD ticket ${ticket.id}`) ||
+    committedTicket?.status !== "IN_PROGRESS" ||
+    committedTicket?.verification?.status !== "PASS" ||
+    JSON.stringify(committedGraph.executionOrder) !== JSON.stringify(graph.executionOrder)
+  ) {
+    throw new Error(`Resumable STANDARD checkpoint ${head} cannot be reconciled safely.`);
+  }
+  ticket.status = "COMPLETE";
+  ticket.checkpointCommit = head;
+  ticket.checkpointedAt = await git(worktree, ["show", "-s", "--format=%cI", head]);
+  graph.executionOrder.push(ticket.id);
+}
+
+/** @param {Record<string, any>} graph */
+function validateDurableExecutionOrder(graph) {
+  const completed = new Set();
+  for (const ticketId of graph.executionOrder) {
+    const frontier = selectDeterministicFrontier(graph.tickets, completed);
+    if (frontier[0]?.id !== ticketId) {
+      throw new Error("Durable STANDARD execution order does not match the deterministic frontier.");
+    }
+    const ticket = frontier[0];
+    if (ticket.status !== "COMPLETE" || !isNonEmptyString(ticket.checkpointCommit)) {
+      throw new Error("Durable STANDARD checkpoint is incomplete.");
+    }
+    completed.add(ticketId);
+  }
+  for (const ticket of graph.tickets) {
+    if (ticket.status === "COMPLETE" && !completed.has(ticket.id)) {
+      throw new Error("Durable STANDARD graph contains an unrecorded completed ticket.");
+    }
+  }
+}
+
 /** @param {string} source */
 function parseResearch(source) {
   const research = parseJsonOutput(source, "Repository research");
@@ -1675,34 +2045,75 @@ function parseResearch(source) {
 /** @param {string} source @param {Record<string, any>} request @param {Record<string, any>} commands */
 function parseExecutionPlan(source, request, commands) {
   const plan = parseJsonOutput(source, "Planner");
-  if (plan.schemaVersion !== 1 || !Array.isArray(plan.tickets) || plan.tickets.length !== 1) {
-    throw new Error("STANDARD Planner must emit one vertical Execution Ticket.");
-  }
-  const ticket = plan.tickets[0];
-  if (
-    !ticket ||
-    !isSafeEvidenceId(ticket.id) ||
-    !isNonEmptyString(ticket.objective) ||
-    !Array.isArray(ticket.acceptanceCriteria) ||
-    !Array.isArray(ticket.verificationIds) ||
-    !Array.isArray(ticket.dependencies) ||
-    ticket.dependencies.length !== 0 ||
-    JSON.stringify(ticket.writeLease) !== JSON.stringify(request.writeLease) ||
-    JSON.stringify(ticket.contextPaths) !== JSON.stringify(request.standard.contextPaths)
-  ) {
-    throw new Error("STANDARD Execution Ticket is not a bounded vertical slice.");
+  if (plan.schemaVersion !== 1 || !Array.isArray(plan.tickets) || plan.tickets.length === 0) {
+    throw new Error("STANDARD Planner must emit one or more vertical Execution Tickets.");
   }
   const selectedVerification = new Set([
     commands.ticketVerification.id,
     ...commands.relevantChecks.map((/** @type {any} */ command) => command.id),
   ]);
-  const coverage = request.standard.acceptanceCriteria.map((/** @type {any} */ criterion) => {
+  const requestLease = new Set(request.writeLease);
+  const requestContext = new Set(request.standard.contextPaths);
+  const ticketIds = new Set();
+  const leasedPaths = new Set();
+  for (const ticket of plan.tickets) {
     if (
-      !ticket.acceptanceCriteria.includes(criterion.id) ||
+      !ticket ||
+      !isSafeEvidenceId(ticket.id) ||
+      ticketIds.has(ticket.id) ||
+      !isNonEmptyString(ticket.objective) ||
+      !Array.isArray(ticket.acceptanceCriteria) ||
+      ticket.acceptanceCriteria.length === 0 ||
+      new Set(ticket.acceptanceCriteria).size !== ticket.acceptanceCriteria.length ||
+      !ticket.acceptanceCriteria.every(isSafeEvidenceId) ||
+      !Array.isArray(ticket.verificationIds) ||
+      ticket.verificationIds.length === 0 ||
+      new Set(ticket.verificationIds).size !== ticket.verificationIds.length ||
+      !ticket.verificationIds.every(
+        (/** @type {string} */ id) => isSafeEvidenceId(id) && selectedVerification.has(id),
+      ) ||
+      !Array.isArray(ticket.dependencies) ||
+      new Set(ticket.dependencies).size !== ticket.dependencies.length ||
+      !ticket.dependencies.every(isSafeEvidenceId) ||
+      !Array.isArray(ticket.writeLease) ||
+      ticket.writeLease.length === 0 ||
+      !ticket.writeLease.every((/** @type {string} */ leasedPath) => requestLease.has(leasedPath)) ||
+      !Array.isArray(ticket.contextPaths) ||
+      ticket.contextPaths.length === 0 ||
+      !ticket.contextPaths.every((/** @type {string} */ contextPath) => requestContext.has(contextPath))
+    ) {
+      throw new Error("STANDARD Execution Ticket is not a bounded vertical slice.");
+    }
+    ticketIds.add(ticket.id);
+    for (const leasedPath of ticket.writeLease) {
+      if (leasedPaths.has(leasedPath)) {
+        throw new Error("STANDARD Execution Ticket Write Leases must not overlap.");
+      }
+      leasedPaths.add(leasedPath);
+    }
+  }
+  if (
+    JSON.stringify([...leasedPaths].sort()) !== JSON.stringify([...requestLease].sort()) ||
+    plan.tickets.some(
+      (/** @type {any} */ ticket) =>
+        ticket.dependencies.includes(ticket.id) ||
+        ticket.dependencies.some((/** @type {string} */ dependency) => !ticketIds.has(dependency)),
+    )
+  ) {
+    throw new Error("STANDARD dependency graph has incomplete lease coverage or invalid blockers.");
+  }
+  assertAcyclicTicketGraph(plan.tickets);
+  const coverage = request.standard.acceptanceCriteria.map((/** @type {any} */ criterion) => {
+    const matchingTickets = plan.tickets.filter((/** @type {any} */ ticket) =>
+      ticket.acceptanceCriteria.includes(criterion.id),
+    );
+    if (matchingTickets.length !== 1) {
+      throw new Error(`Acceptance criterion ${criterion.id} is not fully covered.`);
+    }
+    const ticket = matchingTickets[0];
+    if (
       criterion.verificationIds.some(
-        (/** @type {string} */ verificationId) =>
-          !ticket.verificationIds.includes(verificationId) ||
-          !selectedVerification.has(verificationId),
+        (/** @type {string} */ verificationId) => !ticket.verificationIds.includes(verificationId),
       )
     ) {
       throw new Error(`Acceptance criterion ${criterion.id} is not fully covered.`);
@@ -1714,45 +2125,69 @@ function parseExecutionPlan(source, request, commands) {
     };
   });
   if (
-    ticket.acceptanceCriteria.some(
-      (/** @type {string} */ criterionId) =>
-        !request.standard.acceptanceCriteria.some(
-          (/** @type {any} */ criterion) => criterion.id === criterionId,
-        ),
-    ) ||
-    ticket.verificationIds.some(
-      (/** @type {string} */ verificationId) => !selectedVerification.has(verificationId),
+    plan.tickets.some((/** @type {any} */ ticket) =>
+      ticket.acceptanceCriteria.some(
+        (/** @type {string} */ criterionId) =>
+          !request.standard.acceptanceCriteria.some(
+            (/** @type {any} */ criterion) => criterion.id === criterionId,
+          ),
+      ),
     )
   ) {
     throw new Error("Execution Ticket includes unmapped scope.");
   }
-  return { ticket, coverage };
+  return {
+    tickets: [...plan.tickets]
+      .map((/** @type {any} */ ticket) => ({
+        ...ticket,
+        dependencies: [...ticket.dependencies].sort(compareEvidenceIds),
+      }))
+      .sort((left, right) => compareEvidenceIds(left.id, right.id)),
+    coverage,
+  };
 }
 
-/** @param {{ ticket: any, coverage: any[] }} planned */
+/** @param {any[]} tickets */
+function assertAcyclicTicketGraph(tickets) {
+  const completed = new Set();
+  while (completed.size < tickets.length) {
+    const frontier = selectDeterministicFrontier(tickets, completed);
+    if (frontier.length === 0) {
+      throw new Error("STANDARD dependency graph must be acyclic.");
+    }
+    completed.add(frontier[0].id);
+  }
+}
+
+/** @param {{ tickets: any[], coverage: any[] }} planned */
 function advisorEvidence(planned) {
   return [
     ...planned.coverage.map(
       (coverage) => `coverage-${coverage.acceptanceCriterion}-${coverage.ticket}`,
     ),
-    ...planned.ticket.writeLease.map(
-      (/** @type {string} */ leasedPath) => `write-lease-${leasedPath}`,
-    ),
-    ...planned.ticket.verificationIds.map(
-      (/** @type {string} */ verificationId) => `verification-${verificationId}`,
-    ),
+    ...planned.tickets.flatMap((ticket) => [
+      ...ticket.dependencies.map(
+        (/** @type {string} */ blocker) => `blocking-edge-${blocker}-${ticket.id}`,
+      ),
+      ...ticket.writeLease.map(
+        (/** @type {string} */ leasedPath) => `write-lease-${ticket.id}-${leasedPath}`,
+      ),
+      ...ticket.verificationIds.map(
+        (/** @type {string} */ verificationId) => `verification-${ticket.id}-${verificationId}`,
+      ),
+    ]),
   ].sort();
 }
 
-/** @param {string} source @param {string} ticketId @param {string[]} expectedEvidence */
-function parseAdvisor(source, ticketId, expectedEvidence) {
+/** @param {string} source @param {string[]} ticketIds @param {string[]} expectedEvidence */
+function parseAdvisor(source, ticketIds, expectedEvidence) {
   const advisor = parseJsonOutput(source, "Advisor");
   if (
     JSON.stringify(Object.keys(advisor).sort()) !==
       JSON.stringify(["concerns", "evidence", "schemaVersion", "status", "ticketIds"]) ||
     advisor.schemaVersion !== 1 ||
     advisor.status !== "APPROVED" ||
-    JSON.stringify(advisor.ticketIds) !== JSON.stringify([ticketId]) ||
+    JSON.stringify(advisor.ticketIds) !== JSON.stringify(ticketIds) ||
     !Array.isArray(advisor.evidence) ||
     advisor.evidence.length === 0 ||
     !advisor.evidence.every(isSafeEvidenceId) ||
@@ -1792,8 +2227,21 @@ function parseWorkerVerification(source, verificationId) {
 async function createReviewPacket(context, role, requirements) {
   const artifactNames =
     role === "SPEC_REVIEWER"
-      ? ["advisor.json", "research.json", "spec-lite.json", "ticket.json", "verification.json"]
-      : ["context-packet.json", "task-profile.json", "ticket.json", "verification.json"];
+      ? [
+          "advisor.json",
+          "research.json",
+          "spec-lite.json",
+          "ticket-graph.json",
+          "ticket.json",
+          "verification.json",
+        ]
+      : [
+          "context-packet.json",
+          "task-profile.json",
+          "ticket-graph.json",
+          "ticket.json",
+          "verification.json",
+        ];
   const artifactHashes = [];
   for (const name of artifactNames) {
     const projectPath = `${context.artifactPath}/${name}`;
@@ -2105,7 +2553,9 @@ function runStateArtifact(runId, branch, baseCommit, history, terminal, mode = "
 
 /** @param {string} file @param {unknown} value */
 async function writeJson(file, value) {
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporary, file);
 }
 
 /** @param {Record<string, any>} command @param {{ exitCode: number }} result */
@@ -2123,8 +2573,18 @@ function commandFailure(stage, command, result) {
   return { stage, checkId: command.id, role: command.role, exitCode: result.exitCode };
 }
 
-/** @param {string} runId @param {string} branch @param {string} worktree @param {string} artifactPath @param {string} baseCommit @param {string | null} checkpointCommit @param {string} head @param {number} [workerCount] */
-function runEvidence(runId, branch, worktree, artifactPath, baseCommit, checkpointCommit, head, workerCount = 0) {
+/** @param {string} runId @param {string} branch @param {string} worktree @param {string} artifactPath @param {string} baseCommit @param {string | null} checkpointCommit @param {string} head @param {number} [workerCount] @param {string[]} [checkpointCommits] */
+function runEvidence(
+  runId,
+  branch,
+  worktree,
+  artifactPath,
+  baseCommit,
+  checkpointCommit,
+  head,
+  workerCount = 0,
+  checkpointCommits = checkpointCommit ? [checkpointCommit] : [],
+) {
   return {
     id: runId,
     branch,
@@ -2134,6 +2594,7 @@ function runEvidence(runId, branch, worktree, artifactPath, baseCommit, checkpoi
     workerCount,
     baseCommit,
     checkpointCommit,
+    checkpointCommits,
     head,
   };
 }

@@ -81,17 +81,26 @@ brief rationale, and evidence without requesting routine confirmation. FAST
 continues into execution. DEEP returns `MODE_SELECTED` without creating a Run
 Branch because its execution lifecycle is a separate contract.
 
-The installed V1 runtime executes one-ticket STANDARD requests end to end.
+The installed V1 runtime executes blockers-first STANDARD ticket graphs end to end.
 STANDARD records evidence-backed repository facts, a spec-lite with falsifiable
-acceptance criteria and testing seams, a fully covered vertical Execution Ticket,
-and strict Advisor approval before launching one bounded Worker. The Worker sees
-only its durable Context Packet and exact Write Lease, cannot commit through the
-command guard, and cannot delegate subagents under its contract. Root reruns the
-ticket verification, runs independent Spec and Quality reviews in fresh read-only
-processes, completes every selected instrumental check, and refuses a checkpoint
-if the leased tree no longer matches the ticket verification evidence.
+acceptance criteria and testing seams, fully covered vertical Execution Tickets,
+explicit blocking edges, and strict Advisor approval. Root deterministically
+selects the lexicographically first open ticket whose blockers are complete. Each
+Worker invocation sees only its ticket-specific durable Context Packet and
+exclusive Write Lease, cannot commit through the command guard, and cannot
+delegate subagents under its contract.
 
-Successful STANDARD work receives a Root-owned checkpoint and terminal evidence
+Root reruns targeted verification immediately before every ticket checkpoint,
+records the graph, execution order, attempts, freshness evidence, and checkpoint
+commits, then advances to the next frontier without another chat. A repeated
+invocation with the same request resumes a non-terminal Run Branch/worktree,
+validates its durable request binding and checkpoint, discards the partial
+unverified slice, and retries the first admissible ticket. After the graph is
+complete, independent Spec and Quality reviews run in fresh read-only processes,
+every selected instrumental check completes, and any lease drift since targeted
+verification blocks readiness.
+
+Successful STANDARD work receives one Root-owned checkpoint per ticket and a terminal evidence
 commit on `run/standard/*`, leaves `develop` and `main` untouched, and stops at
 `READY_FOR_HUMAN` without automatic merge.
 
