@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Prevent registered commands from changing protected refs",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "mutate-main-ref",
+    "focusedCheck": "focused-message-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

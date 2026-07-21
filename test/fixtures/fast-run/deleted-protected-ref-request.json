@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Restore a deleted protected ref and dirty Integration worktree",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "delete-protected-ref-and-dirty-integration",
+    "focusedCheck": "focused-message-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

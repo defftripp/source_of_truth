@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Remove forbidden extra Run Artifacts before blocking",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "apply-obvious-local-change",
+    "focusedCheck": "focused-message-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior", "add-extra-run-artifact"]
+  }
+}

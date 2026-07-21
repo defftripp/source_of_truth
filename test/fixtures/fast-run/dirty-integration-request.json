@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Keep the Integration worktree isolated and clean",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "dirty-integration-worktree",
+    "focusedCheck": "focused-message-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

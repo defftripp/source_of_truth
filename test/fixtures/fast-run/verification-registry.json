@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "checks": [
+    {
+      "id": "prepared-project-smoke",
+      "role": "smoke",
+      "command": ["node", ".engineering/runtime/engine.mjs", "--smoke"]
+    },
+    {
+      "id": "apply-obvious-local-change",
+      "role": "implementation",
+      "command": ["node", "scripts/apply-change.mjs"]
+    },
+    {
+      "id": "focused-message-test",
+      "role": "focused-test",
+      "command": ["node", "--test", "test/message.test.mjs"]
+    },
+    {
+      "id": "git-status-focused",
+      "role": "focused-test",
+      "command": ["node", "scripts/check-git-status.mjs"]
+    },
+    {
+      "id": "quality-review",
+      "role": "quality-review",
+      "command": ["node", "scripts/quality-review.mjs"]
+    },
+    {
+      "id": "full-test",
+      "role": "test",
+      "requiredForFast": true,
+      "command": ["node", "--test", "test/message.test.mjs"]
+    },
+    {
+      "id": "typecheck",
+      "role": "typecheck",
+      "requiredForFast": true,
+      "command": ["node", "--check", "src/message.mjs"]
+    },
+    {
+      "id": "build",
+      "role": "build",
+      "requiredForFast": true,
+      "command": ["node", "scripts/build.mjs"]
+    },
+    {
+      "id": "observed-behavior",
+      "role": "observed-behavior",
+      "requiredForFast": true,
+      "command": ["node", "scripts/observe.mjs"]
+    },
+    {
+      "id": "false-green",
+      "role": "test",
+      "requiredForFast": false,
+      "command": ["node", "scripts/false-green.mjs"]
+    },
+    {
+      "id": "leak-raw-log",
+      "role": "implementation",
+      "command": ["node", "scripts/leak-raw-log.mjs"]
+    },
+    {
+      "id": "unsafe-quality-review",
+      "role": "quality-review",
+      "command": ["node", "scripts/unsafe-quality-review.mjs"]
+    },
+    {
+      "id": "commit-outside-lease",
+      "role": "implementation",
+      "command": ["node", "scripts/commit-outside-lease.mjs"]
+    },
+    {
+      "id": "forge-run-artifact",
+      "role": "observed-behavior",
+      "requiredForFast": false,
+      "command": ["node", "scripts/forge-run-artifact.mjs"]
+    },
+    {
+      "id": "add-extra-run-artifact",
+      "role": "observed-behavior",
+      "requiredForFast": false,
+      "command": ["node", "scripts/add-extra-run-artifact.mjs"]
+    },
+    {
+      "id": "commit-then-reset",
+      "role": "implementation",
+      "command": ["node", "scripts/commit-then-reset.mjs"]
+    },
+    {
+      "id": "mutate-main-ref",
+      "role": "implementation",
+      "command": ["node", "scripts/mutate-main-ref.mjs"]
+    },
+    {
+      "id": "dirty-integration-worktree",
+      "role": "implementation",
+      "command": ["node", "scripts/dirty-integration-worktree.mjs"]
+    },
+    {
+      "id": "delete-protected-ref-and-dirty-integration",
+      "role": "implementation",
+      "command": ["node", "scripts/delete-protected-ref-and-dirty-integration.mjs"]
+    }
+  ]
+}

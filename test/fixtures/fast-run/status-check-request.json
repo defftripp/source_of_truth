@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Run Git status against the isolated FAST checkout",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "apply-obvious-local-change",
+    "focusedCheck": "git-status-focused",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Reject a false-green FAST result",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "commands": {
+    "implementation": "apply-obvious-local-change",
+    "focusedCheck": "focused-message-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior", "false-green"]
+  }
+}

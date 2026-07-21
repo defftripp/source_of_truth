@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "checks": [
+    {
+      "id": "prepared-project-smoke",
+      "role": "smoke",
+      "command": ["node", ".engineering/runtime/engine.mjs", "--smoke"]
+    },
+    {
+      "id": "apply-obvious-local-change",
+      "role": "implementation",
+      "command": ["node", "scripts/apply-change.mjs"]
+    },
+    {
+      "id": "focused-message-test",
+      "role": "focused-test",
+      "command": ["node", "--test", "test/message.test.mjs"]
+    },
+    {
+      "id": "quality-review",
+      "role": "quality-review",
+      "command": ["node", "scripts/quality-review.mjs"]
+    },
+    {
+      "id": "full-test",
+      "role": "test",
+      "requiredForFast": true,
+      "command": ["node", "--test", "test/message.test.mjs"]
+    },
+    {
+      "id": "typecheck",
+      "role": "typecheck",
+      "requiredForFast": true,
+      "command": ["node", "--check", "src/message.mjs"]
+    },
+    {
+      "id": "build",
+      "role": "build",
+      "requiredForFast": true,
+      "command": ["node", "scripts/build.mjs"]
+    },
+    {
+      "id": "observed-behavior",
+      "role": "observed-behavior",
+      "requiredForFast": true,
+      "command": ["node", "scripts/observe.mjs"]
+    },
+    {
+      "id": "false-green",
+      "role": "test",
+      "requiredForFast": true,
+      "command": ["node", "scripts/false-green.mjs"]
+    }
+  ]
+}
