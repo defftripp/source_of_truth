@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Select FAST, STANDARD, or DEEP from a deterministic evidence-backed Task Profile without using file count.
+- Keep small cross-file work on the complete FAST lifecycle and expose mode rationale without routine confirmation.
+- Allow only evidenced Root mode escalation and reject routing below the deterministic hard floor.
 - Apply Migration Manifests only with exact SHA-256 approval and source preflight.
 - Add path-scoped one-time overrides, transactional rollback, and post-apply smoke validation.
 - Add read-only legacy-project inventory and hash-bound Migration Manifest proposals.

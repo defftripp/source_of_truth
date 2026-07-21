@@ -45,7 +45,7 @@ node <installed-skill>/scripts/readiness.mjs --explicit --run --target <project>
 
 Replacing the Global Launcher does not replace that pinned runtime.
 
-## FAST run contract
+## Mode policy and FAST run contract
 
 The installed Project Runtime accepts an explicit project-relative run request:
 
@@ -53,16 +53,28 @@ The installed Project Runtime accepts an explicit project-relative run request:
 node <project>/.engineering/runtime/engine.mjs --run-request <request.json>
 ```
 
-The schema `1` request describes a `LOCAL`, `LOW` risk, unambiguous, easily
-reversible task; names the `develop` Integration Branch and `main` Stable
+The schema `1` request supplies a structured Task Profile with `scope`, `risk`,
+`ambiguity`, and `reversibility` evidence. File count is not a policy input: a
+small cross-file change remains FAST when the evidence is `LOCAL`, `LOW`,
+`NONE`, and `EASY`. `MULTI_PART`, `MEDIUM`, `MATERIAL`, or `MODERATE` evidence
+establishes at least a STANDARD floor; `SYSTEM`, `HIGH`, or `HARD` evidence
+establishes a DEEP floor. Root may provide a `rootEscalation` to raise that mode
+only when it records concise evidence, and can never select below the computed
+hard floor.
+
+The request also names the `develop` Integration Branch and `main` Stable
 Branch; declares an exact canonical POSIX, base-relative Application Core
 `writeLease` (never `.engineering` or `.git`); and references
 implementation, focused-test, Quality Review, and full relevant-check IDs
 already registered in `.engineering/verification/registry.json`. Instrumental
 registry entries use `requiredForFast: true`; every required `test`, `typecheck`,
 `build`, and `observed-behavior` check must be present in the request. The
-request contains no shell command text. Other task profiles are rejected by the
-current FAST-only contract.
+request contains no shell command text.
+
+Invocation output always includes the selected mode, deterministic hard floor,
+brief rationale, and evidence without requesting routine confirmation. FAST
+continues into execution. STANDARD and DEEP return `MODE_SELECTED` without
+creating a Run Branch; their execution lifecycles are separate contracts.
 
 The runtime requires a clean prepared Git repository, creates an isolated
 `run/fast/*` branch and sibling worktree, and executes registered commands with

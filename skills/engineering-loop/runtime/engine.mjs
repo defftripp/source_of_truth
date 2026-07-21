@@ -10,6 +10,7 @@ import {
   validateRuntimeManifest,
   verifyFileChecksums,
 } from "./contracts.mjs";
+import { classifyTaskProfile } from "./mode-policy.mjs";
 
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
@@ -32,13 +33,6 @@ const DENIED_ARTIFACT_KEYS = new Set([
   "stderr",
   "stdout",
 ]);
-const FAST_TASK_EVIDENCE = Object.freeze({
-  scope: "LOCAL",
-  risk: "LOW",
-  ambiguity: "NONE",
-  reversibility: "EASY",
-});
-
 /**
  * @param {string} targetInput
  * @param {{ requestPath?: string }} [options]
@@ -50,6 +44,9 @@ export async function runEngineeringRun(targetInput, options = {}) {
     return prepared.report;
   }
   const request = await readRunRequest(target, options.requestPath);
+  if (request.classification.selectedMode !== "FAST") {
+    return reportModeSelection(target, prepared, request);
+  }
   return runFastTask(target, prepared, request);
 }
 
@@ -140,11 +137,7 @@ function validateRunRequest(value) {
   ) {
     throw new Error("Task summary must be a single non-empty line of at most 160 characters.");
   }
-  for (const [field, expected] of Object.entries(FAST_TASK_EVIDENCE)) {
-    if (request.task[field] !== expected) {
-      throw new Error(`Issue #21 supports FAST only: task.${field} must equal ${expected}.`);
-    }
-  }
+  const classification = classifyTaskProfile(request.task, request.rootEscalation);
   if (!request.repository || typeof request.repository !== "object") {
     throw new Error("Run request must identify integration and stable branches.");
   }
@@ -180,7 +173,7 @@ function validateRunRequest(value) {
   ) {
     throw new Error("commands.relevantChecks must contain unique registered command IDs.");
   }
-  return request;
+  return { ...request, classification };
 }
 
 /** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
@@ -189,21 +182,7 @@ async function runFastTask(target, prepared, request) {
   const stableBranch = request.repository.stableBranch;
   const repository = await inspectRepository(target, integrationBranch, stableBranch);
   const commands = resolveRunCommands(prepared.registry, request.commands);
-  const taskProfile = {
-    schemaVersion: 1,
-    selectedMode: "FAST",
-    rationale: "Prepared clean repository with registered commands and a low-risk local task selects FAST.",
-    taskEvidence: { ...FAST_TASK_EVIDENCE },
-    writeLease: request.writeLease,
-    repositoryEvidence: {
-      preparedProject: prepared.report.status === "PREPARED_PROJECT",
-      gitRepository: repository.isGitRepository,
-      cleanWorktree: repository.clean,
-      integrationBranch,
-      stableBranch,
-      registeredCommands: true,
-    },
-  };
+  const taskProfile = buildTaskProfile(prepared, request, repository);
   const runId = createRunId();
   const branch = `run/fast/${runId}`;
   const worktreeRoot = `${target}.engineering-worktrees`;
@@ -479,6 +458,44 @@ async function runFastTask(target, prepared, request) {
   } finally {
     await cleanupCommandGuard(commandGuard);
   }
+}
+
+/** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
+async function reportModeSelection(target, prepared, request) {
+  const repository = await inspectRepository(
+    target,
+    request.repository.integrationBranch,
+    request.repository.stableBranch,
+  );
+  return {
+    schemaVersion: 1,
+    status: "MODE_SELECTED",
+    terminal: false,
+    accepted: false,
+    taskProfile: buildTaskProfile(prepared, request, repository),
+  };
+}
+
+/** @param {{ report: any }} prepared @param {Record<string, any>} request @param {Record<string, any>} repository */
+function buildTaskProfile(prepared, request, repository) {
+  const integrationBranch = request.repository.integrationBranch;
+  const stableBranch = request.repository.stableBranch;
+  const evidence = request.classification.taskEvidence;
+  return {
+    ...request.classification,
+    rationale: request.classification.rootEscalation
+      ? request.classification.rationale
+      : `Prepared clean repository evidence and a ${evidence.risk.toLowerCase()}-risk ${evidence.scope.toLowerCase()} Task Profile select ${request.classification.selectedMode}.`,
+    writeLease: request.writeLease,
+    repositoryEvidence: {
+      preparedProject: prepared.report.status === "PREPARED_PROJECT",
+      gitRepository: repository.isGitRepository,
+      cleanWorktree: repository.clean,
+      integrationBranch,
+      stableBranch,
+      registeredCommands: true,
+    },
+  };
 }
 
 /** @param {Record<string, any>} context @param {string} stage @param {Record<string, any>} command @param {{ exitCode: number }} result @param {any} [qualityReview] */

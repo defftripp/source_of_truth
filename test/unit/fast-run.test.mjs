@@ -24,6 +24,14 @@ test("black-box FAST run reaches READY_FOR_HUMAN with isolated evidence", async 
     assert.equal(report.terminal, true);
     assert.equal(report.accepted, false);
     assert.equal(report.taskProfile.selectedMode, "FAST");
+    assert.equal(report.taskProfile.hardFloor, "FAST");
+    assert.equal(report.taskProfile.routineConfirmationRequired, false);
+    assert.deepEqual(report.taskProfile.taskEvidence, {
+      scope: "LOCAL",
+      risk: "LOW",
+      ambiguity: "NONE",
+      reversibility: "EASY",
+    });
     assert.deepEqual(report.taskProfile.writeLease, ["src/message.mjs"]);
     assert.match(report.taskProfile.rationale, /prepared.*clean.*low-risk.*local/iu);
     assert.deepEqual(report.taskProfile.repositoryEvidence, {
@@ -95,6 +103,119 @@ test("black-box FAST run reaches READY_FOR_HUMAN with isolated evidence", async 
     const commits = await git(prepared.target, "log", "--format=%s", `${prepared.developBefore}..${report.run.head}`);
     assert.match(commits, /record FAST run readiness/u);
     assert.match(commits, /complete FAST task/u);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a small cross-file task completes the FAST lifecycle without spec or tickets", async () => {
+  const prepared = await prepareTarget("cross-file");
+  try {
+    const result = await invokeRun(prepared.target, "cross-file-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, "");
+    const report = /** @type {any} */ (JSON.parse(result.stdout));
+
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.taskProfile.selectedMode, "FAST");
+    assert.equal(report.taskProfile.hardFloor, "FAST");
+    assert.equal(report.taskProfile.routineConfirmationRequired, false);
+    assert.deepEqual(report.taskProfile.writeLease, ["src/message.mjs", "src/suffix.mjs"]);
+    const request = JSON.parse(
+      await readFile(path.join(prepared.target, "cross-file-request.json"), "utf8"),
+    );
+    assert.deepEqual(Object.keys(request.task), [
+      "summary",
+      "scope",
+      "risk",
+      "ambiguity",
+      "reversibility",
+    ]);
+    assert.ok(report.aggregateDiff.files.includes("src/message.mjs"));
+    assert.ok(report.aggregateDiff.files.includes("src/suffix.mjs"));
+    assert.ok(
+      !report.stateHistory.some((/** @type {any} */ entry) =>
+        ["INTERVIEW", "SPEC", "TICKET_PLANNING"].includes(entry.state),
+      ),
+    );
+    const artifactRoot = path.join(report.run.worktree, ...report.run.artifactPath.split("/"));
+    assert.ok(!(await readdir(artifactRoot)).some((name) => /spec|ticket/iu.test(name)));
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("invocation reports a STANDARD selection without executing the FAST lifecycle", async () => {
+  const prepared = await prepareTarget("standard-selection", "verification-registry.json", async (target) => {
+    const requestPath = path.join(target, "cross-file-request.json");
+    const request = JSON.parse(await readFile(requestPath, "utf8"));
+    request.task.scope = "MULTI_PART";
+    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+  });
+  try {
+    const result = await invokeRun(prepared.target, "cross-file-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, "");
+    const report = /** @type {any} */ (JSON.parse(result.stdout));
+
+    assert.equal(report.status, "MODE_SELECTED");
+    assert.equal(report.terminal, false);
+    assert.equal(report.taskProfile.selectedMode, "STANDARD");
+    assert.equal(report.taskProfile.hardFloor, "STANDARD");
+    assert.equal(report.taskProfile.routineConfirmationRequired, false);
+    assert.equal("run" in report, false);
+    assert.equal(await git(prepared.target, "branch", "--list", "run/*"), "");
+    assert.equal(await git(prepared.target, "status", "--porcelain"), "");
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("Root escalation is visible in invocation output only when evidence is recorded", async () => {
+  const evidence = "The public contract rollout needs coordinated review.";
+  const prepared = await prepareTarget("root-escalation", "verification-registry.json", async (target) => {
+    const requestPath = path.join(target, "fast-request.json");
+    const request = JSON.parse(await readFile(requestPath, "utf8"));
+    request.rootEscalation = { mode: "STANDARD", evidence: [evidence] };
+    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+  });
+  try {
+    const result = await invokeRun(prepared.target, "fast-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    const report = /** @type {any} */ (JSON.parse(result.stdout));
+
+    assert.equal(report.status, "MODE_SELECTED");
+    assert.equal(report.taskProfile.hardFloor, "FAST");
+    assert.equal(report.taskProfile.selectedMode, "STANDARD");
+    assert.deepEqual(report.taskProfile.rootEscalation, {
+      mode: "STANDARD",
+      evidence: [evidence],
+    });
+    assert.match(report.taskProfile.rationale, /STANDARD.*coordinated review/iu);
+    assert.equal(await git(prepared.target, "branch", "--list", "run/*"), "");
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("invocation rejects a Root mode below the deterministic hard floor", async () => {
+  const prepared = await prepareTarget("silent-downgrade", "verification-registry.json", async (target) => {
+    const requestPath = path.join(target, "fast-request.json");
+    const request = JSON.parse(await readFile(requestPath, "utf8"));
+    request.task.risk = "HIGH";
+    request.rootEscalation = {
+      mode: "STANDARD",
+      evidence: ["Prefer a shorter workflow."],
+    };
+    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+  });
+  try {
+    const result = await invokeRun(prepared.target, "fast-request.json");
+    assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /below the DEEP hard floor/iu);
+    assert.equal(await git(prepared.target, "branch", "--list", "run/*"), "");
+    assert.equal(await git(prepared.target, "status", "--porcelain"), "");
   } finally {
     await rm(prepared.sandbox, { recursive: true, force: true });
   }
@@ -492,11 +613,16 @@ test("FAST cleans command guard files when command spawning throws", async () =>
   }
 });
 
-/** @param {string} label @param {string} [registryName] */
-async function prepareTarget(label, registryName = "verification-registry.json") {
+/**
+ * @param {string} label
+ * @param {string} [registryName]
+ * @param {(target: string) => Promise<void>} [prepareFixture]
+ */
+async function prepareTarget(label, registryName = "verification-registry.json", prepareFixture) {
   const sandbox = await mkdtemp(path.join(os.tmpdir(), `engineering-loop-fast-${label}-`));
   const target = path.join(sandbox, "target");
   await cp(fixturePath, target, { recursive: true });
+  await prepareFixture?.(target);
   await git(target, "init", "--initial-branch=develop");
   await git(target, "config", "user.name", "Engineering Loop Test");
   await git(target, "config", "user.email", "engineering-loop@example.invalid");

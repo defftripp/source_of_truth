@@ -12,9 +12,19 @@
       "command": ["node", "scripts/apply-change.mjs"]
     },
     {
+      "id": "apply-cross-file-change",
+      "role": "implementation",
+      "command": ["node", "scripts/apply-cross-file-change.mjs"]
+    },
+    {
       "id": "focused-message-test",
       "role": "focused-test",
       "command": ["node", "--test", "test/message.test.mjs"]
+    },
+    {
+      "id": "focused-cross-file-test",
+      "role": "focused-test",
+      "command": ["node", "--test", "test/cross-file.test.mjs"]
     },
     {
       "id": "git-status-focused",

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Coordinate two local modules without extra ceremony",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs", "src/suffix.mjs"],
+  "commands": {
+    "implementation": "apply-cross-file-change",
+    "focusedCheck": "focused-cross-file-test",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

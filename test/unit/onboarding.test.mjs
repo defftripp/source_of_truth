@@ -51,6 +51,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
       ".engineering/runtime/engine.mjs",
       ".engineering/runtime/manifest.json",
       ".engineering/runtime/methodology.md",
+      ".engineering/runtime/mode-policy.mjs",
       ".engineering/runtime/upstream-adoption.json",
       ".engineering/state/project.json",
       ".engineering/verification/registry.json",
