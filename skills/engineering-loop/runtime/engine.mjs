@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   validateAdoptionMatrix,
   validateRuntimeManifest,
+  sha256,
   verifyFileChecksums,
 } from "./contracts.mjs";
 import { classifyTaskProfile } from "./mode-policy.mjs";
@@ -17,10 +18,16 @@ const REGISTRY_PATH = ".engineering/verification/registry.json";
 const OUTPUT_LIMIT = 1024 * 1024;
 const INSTRUMENTAL_ROLES = Object.freeze(["test", "typecheck", "build", "observed-behavior"]);
 const RUN_ARTIFACT_FILES = new Set([
+  "advisor.json",
+  "context-packet.json",
   "quality-review.json",
+  "research.json",
   "result.json",
+  "spec-lite.json",
+  "spec-review.json",
   "state.json",
   "task-profile.json",
+  "ticket.json",
   "verification.json",
 ]);
 const DENIED_ARTIFACT_KEYS = new Set([
@@ -44,10 +51,17 @@ export async function runEngineeringRun(targetInput, options = {}) {
     return prepared.report;
   }
   const request = await readRunRequest(target, options.requestPath);
-  if (request.classification.selectedMode !== "FAST") {
-    return reportModeSelection(target, prepared, request);
+  if (request.classification.selectedMode === "FAST") {
+    return runFastTask(target, prepared, request);
   }
-  return runFastTask(target, prepared, request);
+  if (
+    request.classification.selectedMode === "STANDARD" &&
+    "standard" in request &&
+    request.standard
+  ) {
+    return runStandardTask(target, prepared, request);
+  }
+  return reportModeSelection(target, prepared, request);
 }
 
 /** @param {string} target */
@@ -160,7 +174,20 @@ function validateRunRequest(value) {
   if (!request.commands || typeof request.commands !== "object") {
     throw new Error("Run request must reference registered commands.");
   }
-  for (const field of ["implementation", "focusedCheck", "qualityReview"]) {
+  const standardExecution = classification.selectedMode === "STANDARD" && request.standard;
+  const commandFields =
+    standardExecution
+      ? [
+          "research",
+          "planner",
+          "advisor",
+          "worker",
+          "ticketVerification",
+          "specReview",
+          "qualityReview",
+        ]
+      : ["implementation", "focusedCheck", "qualityReview"];
+  for (const field of commandFields) {
     if (!isNonEmptyString(request.commands[field])) {
       throw new Error(`commands.${field} must reference a registered command ID.`);
     }
@@ -173,7 +200,64 @@ function validateRunRequest(value) {
   ) {
     throw new Error("commands.relevantChecks must contain unique registered command IDs.");
   }
+  if (standardExecution) {
+    validateStandardRequest(request);
+  }
   return { ...request, classification };
+}
+
+/** @param {Record<string, any>} request */
+function validateStandardRequest(request) {
+  const standard = request.standard;
+  if (!standard || typeof standard !== "object") {
+    throw new Error("STANDARD request must include its spec-lite contract.");
+  }
+  if (
+    !Array.isArray(standard.acceptanceCriteria) ||
+    standard.acceptanceCriteria.length === 0 ||
+    !Array.isArray(standard.testingSeams) ||
+    standard.testingSeams.length === 0 ||
+    !Array.isArray(standard.contextPaths) ||
+    standard.contextPaths.length === 0
+  ) {
+    throw new Error("STANDARD spec-lite requires acceptance criteria, testing seams, and context paths.");
+  }
+  const acceptanceIds = new Set();
+  for (const criterion of standard.acceptanceCriteria) {
+    if (
+      !criterion ||
+      !isSafeEvidenceId(criterion.id) ||
+      !isNonEmptyString(criterion.statement) ||
+      !Array.isArray(criterion.verificationIds) ||
+      criterion.verificationIds.length === 0 ||
+      !criterion.verificationIds.every(isSafeEvidenceId) ||
+      acceptanceIds.has(criterion.id)
+    ) {
+      throw new Error("STANDARD acceptance criteria must be unique, falsifiable, and verification-mapped.");
+    }
+    acceptanceIds.add(criterion.id);
+  }
+  const seamIds = new Set();
+  for (const seam of standard.testingSeams) {
+    if (
+      !seam ||
+      !isSafeEvidenceId(seam.id) ||
+      !isNonEmptyString(seam.interface) ||
+      !Array.isArray(seam.verificationIds) ||
+      seam.verificationIds.length === 0 ||
+      !seam.verificationIds.every(isSafeEvidenceId) ||
+      seamIds.has(seam.id)
+    ) {
+      throw new Error("STANDARD testing seams must identify unique public verification boundaries.");
+    }
+    seamIds.add(seam.id);
+  }
+  if (
+    !standard.contextPaths.every(isSafeLeasedPath) ||
+    new Set(standard.contextPaths).size !== standard.contextPaths.length
+  ) {
+    throw new Error("STANDARD context paths must be unique canonical Application Core paths.");
+  }
 }
 
 /** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
@@ -461,6 +545,411 @@ async function runFastTask(target, prepared, request) {
 }
 
 /** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
+async function runStandardTask(target, prepared, request) {
+  const repository = await inspectRepository(
+    target,
+    request.repository.integrationBranch,
+    request.repository.stableBranch,
+  );
+  const commands = resolveStandardCommands(prepared.registry, request.commands);
+  const taskProfile = buildTaskProfile(prepared, request, repository);
+  const runId = createRunId();
+  const branch = `run/standard/${runId}`;
+  const worktreeRoot = `${target}.engineering-worktrees`;
+  const worktree = path.join(worktreeRoot, runId);
+  const artifactPath = `.engineering/runs/${runId}`;
+  const artifactRoot = path.join(worktree, ...artifactPath.split("/"));
+  /** @type {{ sequence: number, state: string, status: string }[]} */
+  const stateHistory = [];
+  /** @type {{ schemaVersion: number, checks: any[] }} */
+  const verification = { schemaVersion: 1, checks: [] };
+  const artifacts = {};
+  await mkdir(worktreeRoot, { recursive: true });
+  const commandGuard = await createGitCommandGuard(worktreeRoot, runId, target);
+  const context = {
+    target,
+    taskProfile,
+    repository,
+    runId,
+    branch,
+    worktree,
+    artifactPath,
+    artifactRoot,
+    stateHistory,
+    verification,
+    writeLease: request.writeLease,
+    commandGuard,
+    artifacts,
+    mode: "STANDARD",
+    blocker: blockStandardRun,
+  };
+
+  try {
+    transitionState(stateHistory, "CLASSIFIED");
+    await git(target, ["worktree", "add", "-b", branch, worktree, repository.integrationHead]);
+    await initializeCommandGuard(commandGuard, worktree, repository, branch);
+    transitionState(stateHistory, "ISOLATED");
+    await mkdir(artifactRoot, { recursive: true });
+    await writeJson(path.join(artifactRoot, "task-profile.json"), taskProfile);
+    await writeRunState(
+      artifactRoot,
+      runId,
+      branch,
+      repository.integrationHead,
+      stateHistory,
+      false,
+      "STANDARD",
+    );
+
+    transitionState(stateHistory, "REPOSITORY_RESEARCH");
+    const researchExecution = await executeReadOnlyRunCommand(context, commands.research);
+    if (researchExecution.blocked) {
+      return researchExecution.blocked;
+    }
+    if (researchExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(context, "REPOSITORY_RESEARCH", commands.research, researchExecution.result);
+    }
+    let research;
+    try {
+      research = parseResearch(researchExecution.result.stdout);
+    } catch {
+      return blockStandardSchema(context, "REPOSITORY_RESEARCH", commands.research.id);
+    }
+    artifacts["research.json"] = research;
+    await writeJson(path.join(artifactRoot, "research.json"), research);
+
+    transitionState(stateHistory, "SPEC_LITE");
+    const specLite = {
+      schemaVersion: 1,
+      taskSummary: request.task.summary,
+      evidenceBackedFacts: research.facts.map((/** @type {any} */ fact) => fact.id),
+      acceptanceCriteria: request.standard.acceptanceCriteria,
+      testingSeams: request.standard.testingSeams,
+    };
+    artifacts["spec-lite.json"] = specLite;
+    await writeJson(path.join(artifactRoot, "spec-lite.json"), specLite);
+
+    transitionState(stateHistory, "TICKET_PLANNING");
+    const plannerExecution = await executeReadOnlyRunCommand(context, commands.planner);
+    if (plannerExecution.blocked) {
+      return plannerExecution.blocked;
+    }
+    if (plannerExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(context, "TICKET_PLANNING", commands.planner, plannerExecution.result);
+    }
+    let planned;
+    try {
+      planned = parseExecutionPlan(plannerExecution.result.stdout, request, commands);
+    } catch {
+      return blockStandardSchema(context, "TICKET_PLANNING", "acceptance-coverage");
+    }
+    const ticketArtifact = { schemaVersion: 1, ...planned.ticket };
+    artifacts["ticket.json"] = ticketArtifact;
+    await writeJson(path.join(artifactRoot, "ticket.json"), ticketArtifact);
+
+    transitionState(stateHistory, "ADVISOR_GATE");
+    const expectedAdvisorEvidence = advisorEvidence(planned);
+    const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
+      ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
+      ENGINEERING_ADVISOR_TICKETS: JSON.stringify([planned.ticket.id]),
+    });
+    if (advisorExecution.blocked) {
+      return advisorExecution.blocked;
+    }
+    if (advisorExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(context, "ADVISOR_GATE", commands.advisor, advisorExecution.result);
+    }
+    let advisor;
+    try {
+      advisor = parseAdvisor(
+        advisorExecution.result.stdout,
+        planned.ticket.id,
+        expectedAdvisorEvidence,
+      );
+    } catch {
+      return blockStandardSchema(context, "ADVISOR_GATE", "advisor-approval");
+    }
+    artifacts["advisor.json"] = advisor;
+    await writeJson(path.join(artifactRoot, "advisor.json"), advisor);
+
+    const contextPacket = {
+      schemaVersion: 1,
+      ticketId: planned.ticket.id,
+      taskSummary: request.task.summary,
+      factIds: specLite.evidenceBackedFacts,
+      acceptanceCriteria: planned.ticket.acceptanceCriteria,
+      verificationIds: planned.ticket.verificationIds,
+      contextPaths: planned.ticket.contextPaths,
+      writeLease: planned.ticket.writeLease,
+      rootWriter: false,
+      workerMayCommit: false,
+      workerMaySpawnSubagents: false,
+    };
+    artifacts["context-packet.json"] = contextPacket;
+    const contextPacketPath = path.join(artifactRoot, "context-packet.json");
+    await writeJson(contextPacketPath, contextPacket);
+
+    transitionState(stateHistory, "IMPLEMENTING");
+    const workerExecution = await executeRunCommand(context, commands.worker, undefined, {
+      ENGINEERING_CONTEXT_PACKET: contextPacketPath,
+      ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
+      ENGINEERING_WORKER_MAY_COMMIT: "0",
+      ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
+    });
+    if (workerExecution.blocked) {
+      return workerExecution.blocked;
+    }
+    if (workerExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(context, "IMPLEMENTING", commands.worker, workerExecution.result);
+    }
+    let workerVerification;
+    try {
+      workerVerification = parseWorkerVerification(
+        workerExecution.result.stdout,
+        commands.ticketVerification.id,
+      );
+    } catch {
+      return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
+    }
+    verification.checks.push(workerVerification);
+    const workerChanges = await changedPaths(worktree, repository.integrationHead);
+    const workerScopeLeak = workerChanges.find(
+      (changedPath) =>
+        !request.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+    );
+    if (workerScopeLeak) {
+      return blockStandardSchema(context, "IMPLEMENTING", "write-lease");
+    }
+
+    transitionState(stateHistory, "TICKET_VERIFICATION");
+    const ticketExecution = await executeRunCommand(context, commands.ticketVerification);
+    if (ticketExecution.blocked) {
+      return ticketExecution.blocked;
+    }
+    const ticketEvidence = {
+      ...commandEvidence(commands.ticketVerification, ticketExecution.result),
+      observedLease: await leaseFingerprint(worktree, request.writeLease),
+    };
+    verification.checks.push(ticketEvidence);
+    await writeJson(path.join(artifactRoot, "verification.json"), verification);
+    if (ticketExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(
+        context,
+        "TICKET_VERIFICATION",
+        commands.ticketVerification,
+        ticketExecution.result,
+      );
+    }
+
+    transitionState(stateHistory, "SPEC_REVIEW");
+    const specRequirements = request.standard.acceptanceCriteria.map(
+      (/** @type {any} */ criterion) => criterion.id,
+    );
+    const specReviewPacket = await createReviewPacket(context, "SPEC_REVIEWER", specRequirements);
+    const specReviewExecution = await executeReadOnlyRunCommand(context, commands.specReview, {
+      ENGINEERING_REVIEW_PACKET: specReviewPacket.path,
+    });
+    if (specReviewExecution.blocked) {
+      return specReviewExecution.blocked;
+    }
+    if (specReviewExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(context, "SPEC_REVIEW", commands.specReview, specReviewExecution.result);
+    }
+    let specReview;
+    try {
+      specReview = parseIndependentReview(
+        specReviewExecution.result.stdout,
+        "SPEC_REVIEWER",
+        specReviewPacket.hash,
+        specRequirements,
+      );
+    } catch {
+      return blockStandardSchema(context, "SPEC_REVIEW", "spec-review-schema");
+    }
+    artifacts["spec-review.json"] = specReview;
+    await writeJson(path.join(artifactRoot, "spec-review.json"), specReview);
+
+    transitionState(stateHistory, "QUALITY_REVIEW");
+    const qualityRequirements = ["write-lease", "worker-contract", "verification-freshness"];
+    const qualityReviewPacket = await createReviewPacket(
+      context,
+      "QUALITY_REVIEWER",
+      qualityRequirements,
+    );
+    const qualityReviewExecution = await executeReadOnlyRunCommand(context, commands.qualityReview, {
+      ENGINEERING_REVIEW_PACKET: qualityReviewPacket.path,
+    });
+    if (qualityReviewExecution.blocked) {
+      return qualityReviewExecution.blocked;
+    }
+    if (qualityReviewExecution.result.exitCode !== 0) {
+      return blockStandardAfterCommand(
+        context,
+        "QUALITY_REVIEW",
+        commands.qualityReview,
+        qualityReviewExecution.result,
+      );
+    }
+    let qualityReview;
+    try {
+      qualityReview = parseIndependentReview(
+        qualityReviewExecution.result.stdout,
+        "QUALITY_REVIEWER",
+        qualityReviewPacket.hash,
+        qualityRequirements,
+      );
+    } catch {
+      return blockStandardSchema(context, "QUALITY_REVIEW", "quality-review-schema");
+    }
+    artifacts["quality-review.json"] = qualityReview;
+    await writeJson(path.join(artifactRoot, "quality-review.json"), qualityReview);
+
+    transitionState(stateHistory, "FULL_VERIFICATION");
+    for (const command of commands.relevantChecks) {
+      const execution = await executeRunCommand(context, command, qualityReview);
+      if (execution.blocked) {
+        return execution.blocked;
+      }
+      verification.checks.push(commandEvidence(command, execution.result));
+      await writeJson(path.join(artifactRoot, "verification.json"), verification);
+      if (execution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(context, "FULL_VERIFICATION", command, execution.result);
+      }
+    }
+    if (
+      JSON.stringify(ticketEvidence.observedLease) !==
+      JSON.stringify(await leaseFingerprint(worktree, request.writeLease))
+    ) {
+      return blockStandardSchema(context, "FULL_VERIFICATION", "verification-freshness");
+    }
+
+    const implementationChanges = await changedPaths(worktree, repository.integrationHead);
+    const unauthorizedPath = implementationChanges.find(
+      (changedPath) =>
+        !request.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+    );
+    if (unauthorizedPath) {
+      return blockStandardSchema(context, "ARTIFACT_VALIDATION", "write-lease");
+    }
+    if (!implementationChanges.some((changedPath) => request.writeLease.includes(changedPath))) {
+      throw new Error("STANDARD Worker produced no Application Core change.");
+    }
+
+    const checkpointArtifacts = {
+      ...artifacts,
+      "state.json": runStateArtifact(
+        runId,
+        branch,
+        repository.integrationHead,
+        stateHistory,
+        false,
+        "STANDARD",
+      ),
+      "task-profile.json": taskProfile,
+      "verification.json": verification,
+    };
+    await Promise.all(
+      Object.entries(checkpointArtifacts).map(([name, value]) =>
+        writeJson(path.join(artifactRoot, name), value),
+      ),
+    );
+    await validateRunArtifacts(artifactRoot, checkpointArtifacts);
+    await git(worktree, ["add", "--all"]);
+    await validateGitArtifacts(worktree, "index", artifactPath, checkpointArtifacts);
+    await validateLeasedIndex(worktree, request.writeLease);
+    const checkpointTree = await git(worktree, ["write-tree"]);
+    await git(worktree, [
+      "-c",
+      `core.hooksPath=${commandGuard.emptyHooks}`,
+      "commit",
+      "-m",
+      `feat: complete STANDARD ticket (${runId})`,
+    ]);
+    const checkpointCommit = await git(worktree, ["rev-parse", "HEAD"]);
+    await validateCommittedTree(worktree, checkpointCommit, checkpointTree);
+    await validateGitArtifacts(worktree, checkpointCommit, artifactPath, checkpointArtifacts);
+
+    const readyStateHistory = [...stateHistory];
+    transitionState(readyStateHistory, "READY_FOR_HUMAN");
+    const resultArtifact = {
+      schemaVersion: 1,
+      status: "READY_FOR_HUMAN",
+      terminal: true,
+      accepted: false,
+      releaseStateReached: true,
+      mode: "STANDARD",
+      branch,
+      baseCommit: repository.integrationHead,
+      checkpointCommit,
+      aggregateDiff: durableAggregateDiff(
+        await aggregateDiff(worktree, repository.integrationHead, checkpointCommit),
+      ),
+    };
+    const terminalArtifacts = {
+      ...checkpointArtifacts,
+      "state.json": runStateArtifact(
+        runId,
+        branch,
+        repository.integrationHead,
+        readyStateHistory,
+        true,
+        "STANDARD",
+      ),
+      "result.json": resultArtifact,
+    };
+    await Promise.all(
+      Object.entries(terminalArtifacts).map(([name, value]) =>
+        writeJson(path.join(artifactRoot, name), value),
+      ),
+    );
+    await validateRunArtifacts(artifactRoot, terminalArtifacts);
+    await git(worktree, ["add", "--all"]);
+    await validateGitArtifacts(worktree, "index", artifactPath, terminalArtifacts);
+    await validateLeasedIndex(worktree, request.writeLease);
+    const terminalTree = await git(worktree, ["write-tree"]);
+    await git(worktree, [
+      "-c",
+      `core.hooksPath=${commandGuard.emptyHooks}`,
+      "commit",
+      "-m",
+      `chore: record STANDARD run readiness (${runId})`,
+    ]);
+    const head = await git(worktree, ["rev-parse", "HEAD"]);
+    await validateCommittedTree(worktree, head, terminalTree);
+    await validateGitArtifacts(worktree, head, artifactPath, terminalArtifacts);
+    transitionState(stateHistory, "READY_FOR_HUMAN");
+    await assertProtectedBranches(target, repository);
+    return {
+      schemaVersion: 1,
+      status: "READY_FOR_HUMAN",
+      terminal: true,
+      accepted: false,
+      releaseStateReached: true,
+      taskProfile,
+      stateHistory,
+      coverage: planned.coverage,
+      advisor,
+      specReview,
+      qualityReview,
+      verification,
+      run: runEvidence(
+        runId,
+        branch,
+        worktree,
+        artifactPath,
+        repository.integrationHead,
+        checkpointCommit,
+        head,
+        1,
+      ),
+      aggregateDiff: await aggregateDiff(worktree, repository.integrationHead, head),
+    };
+  } finally {
+    await cleanupCommandGuard(commandGuard);
+  }
+}
+
+/** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
 async function reportModeSelection(target, prepared, request) {
   const repository = await inspectRepository(
     target,
@@ -575,6 +1064,80 @@ async function blockRun(context) {
   };
 }
 
+/** @param {Record<string, any>} context @param {string} stage @param {Record<string, any>} command @param {{ exitCode: number }} result */
+async function blockStandardAfterCommand(context, stage, command, result) {
+  return blockStandardRun({ ...context, failure: commandFailure(stage, command, result) });
+}
+
+/** @param {Record<string, any>} context @param {string} stage @param {string} checkId */
+async function blockStandardSchema(context, stage, checkId) {
+  return blockStandardRun({
+    ...context,
+    failure: { stage, checkId, role: "schema", exitCode: 1 },
+  });
+}
+
+/** @param {Record<string, any>} context */
+async function blockStandardRun(context) {
+  transitionState(context.stateHistory, "BLOCKED");
+  const stateArtifact = runStateArtifact(
+    context.runId,
+    context.branch,
+    context.repository.integrationHead,
+    context.stateHistory,
+    true,
+    "STANDARD",
+  );
+  const resultArtifact = {
+    schemaVersion: 1,
+    status: "BLOCKED",
+    terminal: true,
+    accepted: false,
+    releaseStateReached: false,
+    mode: "STANDARD",
+    branch: context.branch,
+    baseCommit: context.repository.integrationHead,
+    failure: context.failure,
+  };
+  const expectedArtifacts = {
+    ...context.artifacts,
+    "result.json": resultArtifact,
+    "state.json": stateArtifact,
+    "task-profile.json": context.taskProfile,
+    "verification.json": context.verification,
+  };
+  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
+  await Promise.all(
+    Object.entries(expectedArtifacts).map(([name, value]) =>
+      writeJson(path.join(context.artifactRoot, name), value),
+    ),
+  );
+  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
+  await assertProtectedBranches(context.target, context.repository);
+  const head = await git(context.worktree, ["rev-parse", "HEAD"]);
+  return {
+    schemaVersion: 1,
+    status: "BLOCKED",
+    terminal: true,
+    accepted: false,
+    releaseStateReached: false,
+    taskProfile: context.taskProfile,
+    stateHistory: context.stateHistory,
+    verification: context.verification,
+    failure: context.failure,
+    run: runEvidence(
+      context.runId,
+      context.branch,
+      context.worktree,
+      context.artifactPath,
+      context.repository.integrationHead,
+      null,
+      head,
+      1,
+    ),
+  };
+}
+
 /** @param {string} target @param {string} integrationBranch @param {string} stableBranch */
 async function inspectRepository(target, integrationBranch, stableBranch) {
   const isGitRepository = (await git(target, ["rev-parse", "--is-inside-work-tree"])) === "true";
@@ -668,6 +1231,52 @@ async function restoreProtectedRef(target, branch, expectedHead) {
 
 /** @param {any} registry @param {Record<string, any>} references */
 function resolveRunCommands(registry, references) {
+  const byId = indexVerificationRegistry(registry);
+  const relevantChecks = resolveRelevantChecks(byId, references.relevantChecks);
+  const selectedIds = new Set(references.relevantChecks);
+  for (const role of INSTRUMENTAL_ROLES) {
+    const requiredForRole = registry.checks.filter(
+      (/** @type {any} */ entry) => entry?.role === role && entry.requiredForFast === true,
+    );
+    if (requiredForRole.length === 0) {
+      throw new Error(`Verification registry must require at least one FAST ${role} check.`);
+    }
+    for (const entry of requiredForRole) {
+      if (!selectedIds.has(entry.id)) {
+        throw new Error(`Required FAST check ${entry.id} is missing from the run request.`);
+      }
+    }
+  }
+  return {
+    implementation: resolveRegisteredCommand(byId, references.implementation, "implementation"),
+    focusedCheck: resolveRegisteredCommand(byId, references.focusedCheck, "focused-test"),
+    qualityReview: resolveRegisteredCommand(byId, references.qualityReview, "quality-review"),
+    relevantChecks,
+  };
+}
+
+/** @param {any} registry @param {Record<string, any>} references */
+function resolveStandardCommands(registry, references) {
+  const byId = indexVerificationRegistry(registry);
+  const relevantChecks = resolveRelevantChecks(byId, references.relevantChecks);
+  return {
+    research: resolveRegisteredCommand(byId, references.research, "research"),
+    planner: resolveRegisteredCommand(byId, references.planner, "planner"),
+    advisor: resolveRegisteredCommand(byId, references.advisor, "advisor"),
+    worker: resolveRegisteredCommand(byId, references.worker, "worker"),
+    ticketVerification: resolveRegisteredCommand(
+      byId,
+      references.ticketVerification,
+      "ticket-verification",
+    ),
+    specReview: resolveRegisteredCommand(byId, references.specReview, "spec-review"),
+    qualityReview: resolveRegisteredCommand(byId, references.qualityReview, "quality-review"),
+    relevantChecks,
+  };
+}
+
+/** @param {any} registry */
+function indexVerificationRegistry(registry) {
   if (!registry || registry.schemaVersion !== 1 || !Array.isArray(registry.checks)) {
     throw new Error("Verification registry must use schemaVersion 1 and contain checks.");
   }
@@ -691,45 +1300,31 @@ function resolveRunCommands(registry, references) {
     }
     byId.set(entry.id, entry);
   }
-  /** @param {string} id @param {string} expectedRole */
-  const resolve = (id, expectedRole) => {
-    const entry = byId.get(id);
-    if (!entry || entry.role !== expectedRole) {
-      throw new Error(`Registered command ${id} must have role ${expectedRole}.`);
-    }
-    return entry;
-  };
-  const relevantChecks = references.relevantChecks.map((/** @type {string} */ id) => {
+  return byId;
+}
+
+/** @param {Map<string, any>} byId @param {string} id @param {string} role */
+function resolveRegisteredCommand(byId, id, role) {
+  const entry = byId.get(id);
+  if (!entry || entry.role !== role) {
+    throw new Error(`Registered command ${id} must have role ${role}.`);
+  }
+  return entry;
+}
+
+/** @param {Map<string, any>} byId @param {string[]} ids */
+function resolveRelevantChecks(byId, ids) {
+  return ids.map((id) => {
     const entry = byId.get(id);
     if (!entry || !INSTRUMENTAL_ROLES.includes(entry.role)) {
       throw new Error(`Relevant command ${id} must be an instrumental check.`);
     }
     return entry;
   });
-  const selectedIds = new Set(references.relevantChecks);
-  for (const role of INSTRUMENTAL_ROLES) {
-    const requiredForRole = registry.checks.filter(
-      (/** @type {any} */ entry) => entry?.role === role && entry.requiredForFast === true,
-    );
-    if (requiredForRole.length === 0) {
-      throw new Error(`Verification registry must require at least one FAST ${role} check.`);
-    }
-    for (const entry of requiredForRole) {
-      if (!selectedIds.has(entry.id)) {
-        throw new Error(`Required FAST check ${entry.id} is missing from the run request.`);
-      }
-    }
-  }
-  return {
-    implementation: resolve(references.implementation, "implementation"),
-    focusedCheck: resolve(references.focusedCheck, "focused-test"),
-    qualityReview: resolve(references.qualityReview, "quality-review"),
-    relevantChecks,
-  };
 }
 
-/** @param {Record<string, any>} context @param {{ id: string, command: string[] }} entry @param {any} [qualityReview] */
-async function executeRunCommand(context, entry, qualityReview) {
+/** @param {Record<string, any>} context @param {{ id: string, command: string[] }} entry @param {any} [qualityReview] @param {NodeJS.ProcessEnv} [environmentAdditions] */
+async function executeRunCommand(context, entry, qualityReview, environmentAdditions = {}) {
   await resetCommandGuard(context.commandGuard, context.repository, context.branch);
   const realRunBefore = await captureBranchState(
     context.worktree,
@@ -741,7 +1336,7 @@ async function executeRunCommand(context, entry, qualityReview) {
     entry.command[0],
     entry.command.slice(1),
     context.worktree,
-    commandEnvironment(context.commandGuard),
+    { ...commandEnvironment(context.commandGuard), ...environmentAdditions },
   );
   const realRunAfter = await captureBranchState(
     context.worktree,
@@ -775,7 +1370,7 @@ async function executeRunCommand(context, entry, qualityReview) {
   if (repositoryWrite || rootWrite) {
     return {
       result,
-      blocked: await blockRun({
+      blocked: await (context.blocker ?? blockRun)({
         ...context,
         ...(qualityReview ? { qualityReview } : {}),
         failure: {
@@ -788,6 +1383,23 @@ async function executeRunCommand(context, entry, qualityReview) {
     };
   }
   return { result, blocked: null };
+}
+
+/** @param {Record<string, any>} context @param {{ id: string, command: string[] }} entry @param {NodeJS.ProcessEnv} [environmentAdditions] */
+async function executeReadOnlyRunCommand(context, entry, environmentAdditions = {}) {
+  const before = await workingTreeFingerprint(context.worktree, context.repository.integrationHead);
+  const execution = await executeRunCommand(context, entry, undefined, environmentAdditions);
+  if (execution.blocked) {
+    return execution;
+  }
+  const after = await workingTreeFingerprint(context.worktree, context.repository.integrationHead);
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    return {
+      result: execution.result,
+      blocked: await blockStandardSchema(context, "ARTIFACT_VALIDATION", "read-only-role"),
+    };
+  }
+  return execution;
 }
 
 /** @param {Record<string, any>} context */
@@ -1039,6 +1651,214 @@ async function cleanupCommandGuard(guard) {
 }
 
 /** @param {string} source */
+function parseResearch(source) {
+  const research = parseJsonOutput(source, "Repository research");
+  if (
+    research.schemaVersion !== 1 ||
+    !Array.isArray(research.facts) ||
+    research.facts.length === 0 ||
+    !research.facts.every(
+      (/** @type {any} */ fact) =>
+        fact &&
+        isSafeEvidenceId(fact.id) &&
+        isNonEmptyString(fact.statement) &&
+        Array.isArray(fact.evidence) &&
+        fact.evidence.length > 0 &&
+        fact.evidence.every(isSafeLeasedPath),
+    )
+  ) {
+    throw new Error("Repository research requires evidence-backed facts.");
+  }
+  return research;
+}
+
+/** @param {string} source @param {Record<string, any>} request @param {Record<string, any>} commands */
+function parseExecutionPlan(source, request, commands) {
+  const plan = parseJsonOutput(source, "Planner");
+  if (plan.schemaVersion !== 1 || !Array.isArray(plan.tickets) || plan.tickets.length !== 1) {
+    throw new Error("STANDARD Planner must emit one vertical Execution Ticket.");
+  }
+  const ticket = plan.tickets[0];
+  if (
+    !ticket ||
+    !isSafeEvidenceId(ticket.id) ||
+    !isNonEmptyString(ticket.objective) ||
+    !Array.isArray(ticket.acceptanceCriteria) ||
+    !Array.isArray(ticket.verificationIds) ||
+    !Array.isArray(ticket.dependencies) ||
+    ticket.dependencies.length !== 0 ||
+    JSON.stringify(ticket.writeLease) !== JSON.stringify(request.writeLease) ||
+    JSON.stringify(ticket.contextPaths) !== JSON.stringify(request.standard.contextPaths)
+  ) {
+    throw new Error("STANDARD Execution Ticket is not a bounded vertical slice.");
+  }
+  const selectedVerification = new Set([
+    commands.ticketVerification.id,
+    ...commands.relevantChecks.map((/** @type {any} */ command) => command.id),
+  ]);
+  const coverage = request.standard.acceptanceCriteria.map((/** @type {any} */ criterion) => {
+    if (
+      !ticket.acceptanceCriteria.includes(criterion.id) ||
+      criterion.verificationIds.some(
+        (/** @type {string} */ verificationId) =>
+          !ticket.verificationIds.includes(verificationId) ||
+          !selectedVerification.has(verificationId),
+      )
+    ) {
+      throw new Error(`Acceptance criterion ${criterion.id} is not fully covered.`);
+    }
+    return {
+      acceptanceCriterion: criterion.id,
+      ticket: ticket.id,
+      verificationIds: criterion.verificationIds,
+    };
+  });
+  if (
+    ticket.acceptanceCriteria.some(
+      (/** @type {string} */ criterionId) =>
+        !request.standard.acceptanceCriteria.some(
+          (/** @type {any} */ criterion) => criterion.id === criterionId,
+        ),
+    ) ||
+    ticket.verificationIds.some(
+      (/** @type {string} */ verificationId) => !selectedVerification.has(verificationId),
+    )
+  ) {
+    throw new Error("Execution Ticket includes unmapped scope.");
+  }
+  return { ticket, coverage };
+}
+
+/** @param {{ ticket: any, coverage: any[] }} planned */
+function advisorEvidence(planned) {
+  return [
+    ...planned.coverage.map(
+      (coverage) => `coverage-${coverage.acceptanceCriterion}-${coverage.ticket}`,
+    ),
+    ...planned.ticket.writeLease.map(
+      (/** @type {string} */ leasedPath) => `write-lease-${leasedPath}`,
+    ),
+    ...planned.ticket.verificationIds.map(
+      (/** @type {string} */ verificationId) => `verification-${verificationId}`,
+    ),
+  ].sort();
+}
+
+/** @param {string} source @param {string} ticketId @param {string[]} expectedEvidence */
+function parseAdvisor(source, ticketId, expectedEvidence) {
+  const advisor = parseJsonOutput(source, "Advisor");
+  if (
+    JSON.stringify(Object.keys(advisor).sort()) !==
+      JSON.stringify(["concerns", "evidence", "schemaVersion", "status", "ticketIds"]) ||
+    advisor.schemaVersion !== 1 ||
+    advisor.status !== "APPROVED" ||
+    JSON.stringify(advisor.ticketIds) !== JSON.stringify([ticketId]) ||
+    !Array.isArray(advisor.evidence) ||
+    advisor.evidence.length === 0 ||
+    !advisor.evidence.every(isSafeEvidenceId) ||
+    JSON.stringify([...advisor.evidence].sort()) !== JSON.stringify(expectedEvidence) ||
+    !Array.isArray(advisor.concerns) ||
+    advisor.concerns.length !== 0
+  ) {
+    throw new Error("Advisor must emit a strict evidence-bearing APPROVED result.");
+  }
+  return advisor;
+}
+
+/** @param {string} source @param {string} verificationId */
+function parseWorkerVerification(source, verificationId) {
+  const report = parseJsonOutput(source, "Worker");
+  if (
+    JSON.stringify(Object.keys(report).sort()) !==
+      JSON.stringify(["schemaVersion", "ticketVerification"]) ||
+    report.schemaVersion !== 1 ||
+    !report.ticketVerification ||
+    JSON.stringify(Object.keys(report.ticketVerification).sort()) !==
+      JSON.stringify(["id", "status"]) ||
+    report.ticketVerification.id !== verificationId ||
+    report.ticketVerification.status !== "PASS"
+  ) {
+    throw new Error("Worker must report its mapped ticket verification PASS.");
+  }
+  return {
+    id: verificationId,
+    role: "worker-ticket-verification",
+    status: "PASS",
+    exitCode: 0,
+  };
+}
+
+/** @param {Record<string, any>} context @param {string} role @param {string[]} requirements */
+async function createReviewPacket(context, role, requirements) {
+  const artifactNames =
+    role === "SPEC_REVIEWER"
+      ? ["advisor.json", "research.json", "spec-lite.json", "ticket.json", "verification.json"]
+      : ["context-packet.json", "task-profile.json", "ticket.json", "verification.json"];
+  const artifactHashes = [];
+  for (const name of artifactNames) {
+    const projectPath = `${context.artifactPath}/${name}`;
+    artifactHashes.push({
+      path: projectPath,
+      sha256: sha256(await readFile(path.join(context.artifactRoot, name))),
+    });
+  }
+  const packet = {
+    schemaVersion: 1,
+    role,
+    readOnly: true,
+    fixedPoint: context.repository.integrationHead,
+    requirements,
+    diffFiles: (await changedPaths(context.worktree, context.repository.integrationHead)).filter(
+      (changedPath) => !changedPath.startsWith(`${context.artifactPath}/`),
+    ),
+    artifactHashes,
+  };
+  const packetPath = path.join(context.commandGuard.root, `${role.toLowerCase()}-packet.json`);
+  await writeJson(packetPath, packet);
+  return { path: packetPath, hash: sha256(await readFile(packetPath)) };
+}
+
+/** @param {string} source @param {string} role @param {string} packetHash @param {string[]} requirements */
+function parseIndependentReview(source, role, packetHash, requirements) {
+  const review = parseJsonOutput(source, role);
+  if (
+    JSON.stringify(Object.keys(review).sort()) !==
+      JSON.stringify(["coverage", "evidence", "packetHash", "schemaVersion", "status", "unverified"]) ||
+    review.schemaVersion !== 1 ||
+    review.status !== "PASS" ||
+    review.packetHash !== packetHash ||
+    !Array.isArray(review.coverage) ||
+    review.coverage.length === 0 ||
+    !review.coverage.every(isSafeEvidenceId) ||
+    JSON.stringify(review.coverage) !== JSON.stringify(requirements) ||
+    !Array.isArray(review.evidence) ||
+    review.evidence.length === 0 ||
+    !review.evidence.every(isSafeEvidenceId) ||
+    !Array.isArray(review.unverified) ||
+    !review.unverified.every(isSafeEvidenceId)
+  ) {
+    throw new Error(`${role} PASS requires a fresh read-only context, coverage, and evidence.`);
+  }
+  return {
+    schemaVersion: 1,
+    status: "PASS",
+    context: { role, fresh: true, readOnly: true, packetHash },
+    coverage: review.coverage,
+    evidence: review.evidence,
+    unverified: review.unverified,
+  };
+}
+
+/** @param {string} source @param {string} label */
+function parseJsonOutput(source, label) {
+  try {
+    return JSON.parse(source);
+  } catch {
+    throw new Error(`${label} must emit one structured JSON result.`);
+  }
+}
+
+/** @param {string} source */
 function parseQualityReview(source) {
   let review;
   try {
@@ -1076,6 +1896,27 @@ async function changedPaths(worktree, baseCommit) {
     gitNullPaths(worktree, ["ls-files", "--others", "--exclude-standard", "-z"]),
   ]);
   return [...new Set(groups.flat().map((candidate) => candidate.replaceAll("\\", "/")))].sort();
+}
+
+/** @param {string} worktree @param {string} baseCommit */
+async function workingTreeFingerprint(worktree, baseCommit) {
+  const paths = await changedPaths(worktree, baseCommit);
+  return Promise.all(
+    paths.map(async (projectPath) => ({
+      path: projectPath,
+      hash: await tryGit(worktree, ["hash-object", "--no-filters", "--", projectPath]),
+    })),
+  );
+}
+
+/** @param {string} worktree @param {string[]} writeLease */
+async function leaseFingerprint(worktree, writeLease) {
+  return Promise.all(
+    writeLease.map(async (projectPath) => ({
+      path: projectPath,
+      hash: await tryGit(worktree, ["hash-object", "--no-filters", "--", projectPath]),
+    })),
+  );
 }
 
 /** @param {string} artifactRoot @param {Record<string, unknown>} expectedArtifacts */
@@ -1241,19 +2082,19 @@ function transitionState(history, state) {
   history.push({ sequence: history.length + 1, state, status: "COMPLETE" });
 }
 
-/** @param {string} artifactRoot @param {string} runId @param {string} branch @param {string} baseCommit @param {any[]} history @param {boolean} terminal */
-async function writeRunState(artifactRoot, runId, branch, baseCommit, history, terminal) {
-  const artifact = runStateArtifact(runId, branch, baseCommit, history, terminal);
+/** @param {string} artifactRoot @param {string} runId @param {string} branch @param {string} baseCommit @param {any[]} history @param {boolean} terminal @param {string} [mode] */
+async function writeRunState(artifactRoot, runId, branch, baseCommit, history, terminal, mode = "FAST") {
+  const artifact = runStateArtifact(runId, branch, baseCommit, history, terminal, mode);
   await writeJson(path.join(artifactRoot, "state.json"), artifact);
   return artifact;
 }
 
-/** @param {string} runId @param {string} branch @param {string} baseCommit @param {any[]} history @param {boolean} terminal */
-function runStateArtifact(runId, branch, baseCommit, history, terminal) {
+/** @param {string} runId @param {string} branch @param {string} baseCommit @param {any[]} history @param {boolean} terminal @param {string} [mode] */
+function runStateArtifact(runId, branch, baseCommit, history, terminal, mode = "FAST") {
   return {
     schemaVersion: 1,
     runId,
-    mode: "FAST",
+    mode,
     branch,
     baseCommit,
     currentState: history.at(-1)?.state,
@@ -1282,15 +2123,15 @@ function commandFailure(stage, command, result) {
   return { stage, checkId: command.id, role: command.role, exitCode: result.exitCode };
 }
 
-/** @param {string} runId @param {string} branch @param {string} worktree @param {string} artifactPath @param {string} baseCommit @param {string | null} checkpointCommit @param {string} head */
-function runEvidence(runId, branch, worktree, artifactPath, baseCommit, checkpointCommit, head) {
+/** @param {string} runId @param {string} branch @param {string} worktree @param {string} artifactPath @param {string} baseCommit @param {string | null} checkpointCommit @param {string} head @param {number} [workerCount] */
+function runEvidence(runId, branch, worktree, artifactPath, baseCommit, checkpointCommit, head, workerCount = 0) {
   return {
     id: runId,
     branch,
     worktree,
     artifactPath,
     rootWriter: true,
-    workerCount: 0,
+    workerCount,
     baseCommit,
     checkpointCommit,
     head,

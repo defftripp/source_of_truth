@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Execute a one-ticket STANDARD lifecycle through repository research, spec-lite, complete Planner coverage, and a strict Advisor Gate.
+- Constrain the STANDARD Worker to a bounded Context Packet and Write Lease while Root owns fresh verification and checkpoint commits.
+- Run independent Spec and Quality reviews and reject stale ticket evidence before READY_FOR_HUMAN.
 - Select FAST, STANDARD, or DEEP from a deterministic evidence-backed Task Profile without using file count.
 - Keep small cross-file work on the complete FAST lifecycle and expose mode rationale without routine confirmation.
 - Allow only evidenced Root mode escalation and reject routing below the deterministic hard floor.

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Reject stale STANDARD verification",
+    "scope": "MULTI_PART",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "standard": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "statement": "The public message export returns the STANDARD result.",
+        "verificationIds": ["ticket-message-test", "stale-mutation"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-1",
+        "interface": "The public message module export.",
+        "verificationIds": ["ticket-message-test"]
+      }
+    ],
+    "contextPaths": ["src/message.mjs", "test/message.test.mjs"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "stale-ticket-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-message-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "stale-mutation"]
+  }
+}

@@ -62,19 +62,38 @@ establishes a DEEP floor. Root may provide a `rootEscalation` to raise that mode
 only when it records concise evidence, and can never select below the computed
 hard floor.
 
-The request also names the `develop` Integration Branch and `main` Stable
+Every request also names the `develop` Integration Branch and `main` Stable
 Branch; declares an exact canonical POSIX, base-relative Application Core
-`writeLease` (never `.engineering` or `.git`); and references
-implementation, focused-test, Quality Review, and full relevant-check IDs
-already registered in `.engineering/verification/registry.json`. Instrumental
-registry entries use `requiredForFast: true`; every required `test`, `typecheck`,
-`build`, and `observed-behavior` check must be present in the request. The
-request contains no shell command text.
+`writeLease` (never `.engineering` or `.git`); and references only command IDs
+already registered in `.engineering/verification/registry.json`. The request
+contains no shell command text.
+
+FAST references implementation, focused-test, Quality Review, and relevant
+instrumental checks. Instrumental registry entries declare `requiredForFast`;
+every required `test`, `typecheck`, `build`, and `observed-behavior` check must
+be selected. STANDARD instead references research, Planner, Advisor, Worker,
+ticket-verification, Spec Review, Quality Review, and the full relevant
+instrumental checks. STANDARD checks may be inapplicable to FAST and therefore
+declare `requiredForFast: false`.
 
 Invocation output always includes the selected mode, deterministic hard floor,
 brief rationale, and evidence without requesting routine confirmation. FAST
-continues into execution. STANDARD and DEEP return `MODE_SELECTED` without
-creating a Run Branch; their execution lifecycles are separate contracts.
+continues into execution. DEEP returns `MODE_SELECTED` without creating a Run
+Branch because its execution lifecycle is a separate contract.
+
+The installed V1 runtime executes one-ticket STANDARD requests end to end.
+STANDARD records evidence-backed repository facts, a spec-lite with falsifiable
+acceptance criteria and testing seams, a fully covered vertical Execution Ticket,
+and strict Advisor approval before launching one bounded Worker. The Worker sees
+only its durable Context Packet and exact Write Lease, cannot commit through the
+command guard, and cannot delegate subagents under its contract. Root reruns the
+ticket verification, runs independent Spec and Quality reviews in fresh read-only
+processes, completes every selected instrumental check, and refuses a checkpoint
+if the leased tree no longer matches the ticket verification evidence.
+
+Successful STANDARD work receives a Root-owned checkpoint and terminal evidence
+commit on `run/standard/*`, leaves `develop` and `main` untouched, and stops at
+`READY_FOR_HUMAN` without automatic merge.
 
 The runtime requires a clean prepared Git repository, creates an isolated
 `run/fast/*` branch and sibling worktree, and executes registered commands with
