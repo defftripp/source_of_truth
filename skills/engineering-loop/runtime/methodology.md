@@ -11,6 +11,24 @@ graph. Root chooses the lexicographically first open ticket whose blockers are
 complete. Each Worker invocation receives only that ticket's Context Packet and
 exclusive Write Lease; Root remains the sole committer.
 
+When repository research leaves one real product decision unresolved, STANDARD
+persists exactly one `human-gate.json` after `research.json` and before spec,
+planning, or Worker execution. The question carries one recommendation and the
+consequence of every alternative. Facts explicitly resolved by repository
+evidence fail the question audit instead of being asked; every research fact
+must provide an exhaustive (possibly empty) list of decision IDs it resolves.
+A human answer is
+mutable resume input and is excluded from the request binding; task evidence,
+repository branches, contracts, commands, Write Lease, and Remote Checkpoint
+Sync settings remain immutable. Root resumes the same Run Branch, records the
+answer once in `CONTEXT.md`, and creates an ADR only when the decision is both
+hard to reverse and surprising.
+
+The waiting decision gate itself is a Root-owned checkpoint. With Remote
+Checkpoint Sync enabled, that checkpoint is published to the Run Branch before
+the pause, so a fresh clone can validate the gate, recreate the worktree, accept
+the transient answer, and continue without a ticket graph or chat history.
+
 Root reruns targeted verification immediately before every ticket checkpoint,
 persists the graph, evidence, execution order, attempts, and checkpoint commits,
 then advances to the next frontier without another chat. Non-terminal state is
@@ -28,6 +46,10 @@ stops at a non-terminal Human Gate with both histories intact. A fresh machine
 may fetch a matching non-terminal Run Branch, validate its request hash, base
 commit, state, and ticket graph, then recreate the local worktree and continue
 the deterministic frontier without chat history.
+
+Decision and remote-divergence pauses share the same durable Human Gate schema
+and non-terminal report contract. Remote sync retains its compatible blocker and
+sync evidence fields while exposing the same single-question structure.
 
 Once the graph is complete, Root executes Spec Review and Quality Review in
 separate fresh read-only contexts, runs the full relevant instrumental checks,

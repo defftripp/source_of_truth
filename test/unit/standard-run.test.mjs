@@ -8,6 +8,7 @@ import {
   assertRemoteSyncPolicy,
   checkpointCommitsInExecutionOrder,
   selectDeterministicFrontier,
+  standardRequestBindingHash,
 } from "../../skills/engineering-loop/runtime/engine.mjs";
 import { runProcess } from "../support/process.mjs";
 import { snapshotTree } from "../support/snapshot.mjs";
@@ -67,6 +68,169 @@ test("Remote Checkpoint Sync policy rejects protected branches, merge, and force
     () => assertRemoteSyncPolicy({ ...safe, currentBranch: "run/standard/other" }),
     /current STANDARD Run Branch/u,
   );
+});
+
+test("STANDARD request binding excludes only human answers and keeps remote sync immutable", () => {
+  const request = {
+    schemaVersion: 1,
+    task: { summary: "decision" },
+    settings: { remoteCheckpointSync: { enabled: true, remote: "origin" } },
+    humanAnswers: { "DECISION-1": "engineers" },
+  };
+  assert.equal(
+    standardRequestBindingHash(request),
+    standardRequestBindingHash({ ...request, humanAnswers: { "DECISION-1": "operators" } }),
+  );
+  assert.notEqual(
+    standardRequestBindingHash(request),
+    standardRequestBindingHash({
+      ...request,
+      settings: { remoteCheckpointSync: { enabled: false, remote: "origin" } },
+    }),
+  );
+});
+
+test("ambiguous STANDARD records research before one durable decision gate and never starts Worker", async () => {
+  const prepared = await prepareTarget("decision-waiting");
+  try {
+    const contextBefore = await readFile(path.join(prepared.target, ".engineering", "CONTEXT.md"), "utf8");
+    const result = await invokeRun(prepared.target, "decision-request.json");
+    assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, "");
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, "HUMAN_GATE");
+    assert.equal(report.terminal, false);
+    assert.equal(report.run.workerCount, 0);
+    assert.deepEqual(
+      report.stateHistory.map((/** @type {any} */ entry) => entry.state),
+      ["CLASSIFIED", "ISOLATED", "REPOSITORY_RESEARCH", "HUMAN_GATE"],
+    );
+    assert.equal(report.humanGate.kind, "DECISION");
+    assert.equal(report.humanGate.status, "WAITING");
+    assert.equal(report.humanGate.question.prompt, "Which audience should the public message address?");
+    assert.equal(report.humanGate.question.recommendation.answer, "engineers");
+    assert.equal(report.humanGate.question.alternatives.length, 1);
+    assert.match(report.humanGate.question.alternatives[0].consequence, /operations-facing/u);
+    assert.deepEqual(report.humanGate.researchFactIds, ["fact-public-message"]);
+
+    const artifactRoot = path.join(report.run.worktree, ...report.run.artifactPath.split("/"));
+    const artifactTree = await snapshotTree(artifactRoot);
+    assert.deepEqual(
+      artifactTree.map((entry) => entry.path),
+      ["human-gate.json", "research.json", "result.json", "state.json", "task-profile.json", "verification.json"],
+    );
+    assert.equal(await readFile(path.join(prepared.target, ".engineering", "CONTEXT.md"), "utf8"), contextBefore);
+    assert.deepEqual(await git(prepared.target, "status", "--porcelain"), "");
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("question audit rejects a decision already answered by repository facts", async () => {
+  const prepared = await prepareTarget("decision-known-fact", async (target) => {
+    const researchPath = path.join(target, "scripts", "research.mjs");
+    const source = await readFile(researchPath, "utf8");
+    await writeFile(
+      researchPath,
+      source.replace('answersDecisionQuestions: [],', 'answersDecisionQuestions: ["DECISION-AUDIENCE"],'),
+      "utf8",
+    );
+  });
+  try {
+    const result = await invokeRun(prepared.target, "decision-request.json");
+    assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, "BLOCKED");
+    assert.equal(report.failure.stage, "DECISION_GATE");
+    assert.equal(report.failure.checkId, "question-audit");
+    assert.equal(report.run.workerCount, 0);
+    assert.ok(!report.stateHistory.some((/** @type {any} */ entry) => entry.state === "IMPLEMENTING"));
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a human answer resumes the same STANDARD run, updates CONTEXT once, and skips reversible ADR", async () => {
+  const prepared = await prepareTarget("decision-resume");
+  try {
+    const waiting = JSON.parse((await invokeRun(prepared.target, "decision-request.json")).stdout);
+    const resumed = await invokeRun(prepared.target, "decision-request.json", "DECISION-AUDIENCE=engineers");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.run.id, waiting.run.id);
+    assert.equal(report.run.branch, waiting.run.branch);
+    assert.equal(report.run.workerCount, 1);
+    assert.equal("humanGate" in report, false);
+    assert.ok(report.stateHistory.some((/** @type {any} */ entry) => entry.state === "DECISION_RECORDED"));
+
+    const context = await gitShow(prepared.target, report.run.head, ".engineering/CONTEXT.md");
+    assert.equal((context.match(/engineering-loop:decision:DECISION-AUDIENCE/gu) ?? []).length, 1);
+    assert.match(context, /Public audience: The public message is intended for engineers\./u);
+    assert.equal(await git(prepared.target, "ls-tree", "-r", "--name-only", report.run.head, ".engineering/adrs"), ".engineering/adrs/.gitkeep");
+    const gate = await gitShowJson(prepared.target, report.run.head, `${report.run.artifactPath}/human-gate.json`);
+    assert.equal(gate.status, "ANSWERED");
+    assert.equal(gate.answer.value, "engineers");
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a hard-to-reverse surprising answer creates exactly one linked ADR", async () => {
+  const prepared = await prepareTarget("decision-adr");
+  try {
+    const waiting = JSON.parse((await invokeRun(prepared.target, "hard-decision-request.json")).stdout);
+    const resumed = await invokeRun(prepared.target, "hard-decision-request.json", "DECISION-AUDIENCE=engineers");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.run.id, waiting.run.id);
+    const adrs = (await git(prepared.target, "ls-tree", "-r", "--name-only", report.run.head, ".engineering/adrs"))
+      .split(/\r?\n/u)
+      .filter((/** @type {string} */ entry) => entry.endsWith(".md"));
+    assert.deepEqual(adrs, [".engineering/adrs/ADR-DECISION-AUDIENCE.md"]);
+    const adr = await gitShow(prepared.target, report.run.head, adrs[0]);
+    assert.match(adr, /DECISION-AUDIENCE/u);
+    assert.match(adr, /engineers/u);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a fresh clone resumes a synchronized waiting decision gate without chat history", async () => {
+  const prepared = await prepareTarget("d2c");
+  try {
+    const requestPath = path.join(prepared.target, "decision-request.json");
+    const request = JSON.parse(await readFile(requestPath, "utf8"));
+    request.settings = { remoteCheckpointSync: { enabled: true, remote: "origin" } };
+    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+    await git(prepared.target, "add", "decision-request.json");
+    await git(prepared.target, "commit", "-m", "test: enable decision gate sync");
+    prepared.developBefore = await git(prepared.target, "rev-parse", "develop");
+    const remote = await attachBareRemote(prepared);
+
+    const waitingResult = await invokeRun(prepared.target, "decision-request.json");
+    assert.equal(waitingResult.code, 1, `${waitingResult.stdout}\n${waitingResult.stderr}`);
+    const waiting = JSON.parse(waitingResult.stdout);
+    assert.equal(waiting.status, "HUMAN_GATE");
+    assert.equal((await remoteRunBranches(remote)).length, 1);
+
+    const secondTarget = path.join(prepared.sandbox, "m2");
+    await git(prepared.sandbox, "-c", "core.autocrlf=false", "clone", remote, secondTarget);
+    await git(secondTarget, "config", "core.autocrlf", "false");
+    await git(secondTarget, "branch", "main", "origin/main");
+    await git(secondTarget, "config", "user.name", "Decision Machine");
+    await git(secondTarget, "config", "user.email", "decision-machine@example.invalid");
+    const resumed = await invokeRun(secondTarget, "decision-request.json", "DECISION-AUDIENCE=engineers");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.run.id, waiting.run.id);
+    assert.equal(report.run.branch, waiting.run.branch);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.remoteSync.restoredFromRemote, true);
+    assert.ok(report.stateHistory.some((/** @type {any} */ entry) => entry.state === "DECISION_RECORDED"));
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
 });
 
 test("Remote Checkpoint Sync is opt-in and publishes only the current Run Branch", async () => {
@@ -149,10 +313,17 @@ test("remote divergence stops at a Human Gate without overwriting either history
     assert.equal(report.terminal, false);
     assert.equal(report.accepted, false);
     assert.equal(report.blocker.reason, "REMOTE_DIVERGENCE");
+    assert.equal(report.humanGate.kind, "REMOTE_SYNC");
+    assert.equal(report.humanGate.status, "WAITING");
+    assert.equal(report.humanGate.question.alternatives.length, 1);
     assert.equal(report.blocker.remoteHead, remoteDivergedHead);
     assert.notEqual(report.blocker.localHead, remoteDivergedHead);
     assert.equal((await remoteRefs(remote))[`refs/heads/${runBranch}`], remoteDivergedHead);
     assert.equal(await git(worktree, "merge-base", "--is-ancestor", localCheckpoint, report.run.head), "");
+    const durableGate = JSON.parse(
+      await readFile(path.join(worktree, ...report.run.artifactPath.split("/"), "human-gate.json"), "utf8"),
+    );
+    assert.equal(durableGate.blocker.reason, "REMOTE_DIVERGENCE");
     assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
     assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
   } finally {
@@ -626,11 +797,16 @@ async function remoteRunBranches(remote) {
   return output.split(/\r?\n/u).filter(Boolean);
 }
 
-/** @param {string} target @param {string} requestPath */
-function invokeRun(target, requestPath) {
+/** @param {string} target @param {string} requestPath @param {string} [humanAnswer] */
+function invokeRun(target, requestPath, humanAnswer) {
   return runProcess(
     process.execPath,
-    [path.join(target, ".engineering", "runtime", "engine.mjs"), "--run-request", requestPath],
+    [
+      path.join(target, ".engineering", "runtime", "engine.mjs"),
+      "--run-request",
+      requestPath,
+      ...(humanAnswer ? ["--human-answer", humanAnswer] : []),
+    ],
     { cwd: target },
   );
 }
@@ -644,5 +820,10 @@ async function git(cwd, ...args) {
 
 /** @param {string} cwd @param {string} revision @param {string} projectPath */
 async function gitShowJson(cwd, revision, projectPath) {
-  return JSON.parse(await git(cwd, "show", `${revision}:${projectPath}`));
+  return JSON.parse(await gitShow(cwd, revision, projectPath));
+}
+
+/** @param {string} cwd @param {string} revision @param {string} projectPath */
+function gitShow(cwd, revision, projectPath) {
+  return git(cwd, "show", `${revision}:${projectPath}`);
 }

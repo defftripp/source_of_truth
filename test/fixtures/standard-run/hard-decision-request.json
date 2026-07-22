@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Choose a surprising durable public audience contract",
+    "scope": "MULTI_PART",
+    "risk": "MEDIUM",
+    "ambiguity": "MATERIAL",
+    "reversibility": "MODERATE"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "standard": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "statement": "The public message export returns the STANDARD result.",
+        "verificationIds": ["ticket-message-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-1",
+        "interface": "The public message module export.",
+        "verificationIds": ["ticket-message-test"]
+      }
+    ],
+    "contextPaths": ["src/message.mjs", "test/message.test.mjs"],
+    "decision": {
+      "id": "DECISION-AUDIENCE",
+      "question": "Which audience should own the durable public message contract?",
+      "recommendation": {
+        "answer": "engineers",
+        "consequence": "Makes engineering ownership explicit and durable."
+      },
+      "alternatives": [
+        {
+          "answer": "operators",
+          "consequence": "Moves ownership to operations and changes future terminology."
+        }
+      ],
+      "context": {
+        "term": "Public audience owner",
+        "definitions": {
+          "engineers": "Engineers own the durable public message contract.",
+          "operators": "Operators own the durable public message contract."
+        }
+      },
+      "reversibility": "HARD",
+      "surprising": true
+    }
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "one-ticket-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-message-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

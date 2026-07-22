@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Stop ambiguous STANDARD runs after repository research at one durable,
+  recommendation-bearing Human Gate; resume the same request after an answer,
+  update CONTEXT idempotently, and create ADRs only for surprising
+  hard-to-reverse decisions.
+- Publish an opt-in waiting decision-gate checkpoint so a fresh clone can resume
+  before ticket planning, and require exhaustive repository-fact question audit
+  metadata from Explorer.
+- Bind mutable human answers separately from immutable run inputs, including
+  Remote Checkpoint Sync settings, and use one compatible Human Gate artifact
+  for decision and remote-divergence pauses.
 - Add opt-in, fast-forward-only Remote Checkpoint Sync for the current Run Branch with durable evidence.
 - Stop remote divergence at a non-terminal Human Gate and resume matching durable STANDARD runs from a fresh clone.
 - Execute multi-ticket STANDARD graphs blockers-first with a deterministic frontier and one fresh Root checkpoint per vertical ticket.

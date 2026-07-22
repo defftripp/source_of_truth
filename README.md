@@ -90,6 +90,21 @@ Worker invocation sees only its ticket-specific durable Context Packet and
 exclusive Write Lease, cannot commit through the command guard, and cannot
 delegate subagents under its contract.
 
+If repository research leaves one real STANDARD decision unresolved, the run
+stops before spec, planning, and Worker execution with one durable Human Gate.
+`human-gate.json` records the evidence-backed fact IDs, one recommended answer,
+and consequences for each alternative. Repository facts cannot be rephrased as
+questions; Explorer marks every fact with the exhaustive decision IDs it
+resolves. The waiting gate receives a Root checkpoint and, when sync is enabled,
+can be restored by a fresh clone before any ticket exists. Reinvocation with the matching human answer resumes the same run;
+the answer does not change request identity, while remote sync settings and all
+other request fields remain immutable. Root updates `.engineering/CONTEXT.md`
+idempotently and creates an ADR only for a surprising hard-to-reverse choice.
+
+```text
+node .engineering/runtime/engine.mjs --run-request request.json --human-answer DECISION-ID=answer
+```
+
 Root reruns targeted verification immediately before every ticket checkpoint,
 records the graph, execution order, attempts, freshness evidence, and checkpoint
 commits, then advances to the next frontier without another chat. A repeated
@@ -117,7 +132,8 @@ When enabled, Root fetches remote state before each publication and pushes only
 the exact current `run/standard/*` refspec. It never pushes `develop` or `main`,
 never force-pushes, and never merges. Remote divergence or a rejected update
 returns a non-terminal `HUMAN_GATE`, records the local and remote heads in
-`remote-sync.json`, and leaves both histories intact. On another machine, the
+`remote-sync.json`, writes the shared `human-gate.json` contract, and leaves both
+histories intact. On another machine, the
 same request fetches a matching non-terminal remote Run Branch, validates its
 request hash, base commit, Run State Store, and ticket graph, recreates the Run
 worktree, and resumes the deterministic frontier without chat history.

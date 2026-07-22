@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Choose the public audience before the STANDARD message change",
+    "scope": "MULTI_PART",
+    "risk": "LOW",
+    "ambiguity": "MATERIAL",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "standard": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "statement": "The public message export returns the STANDARD result.",
+        "verificationIds": ["ticket-message-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-1",
+        "interface": "The public message module export.",
+        "verificationIds": ["ticket-message-test"]
+      }
+    ],
+    "contextPaths": ["src/message.mjs", "test/message.test.mjs"],
+    "decision": {
+      "id": "DECISION-AUDIENCE",
+      "question": "Which audience should the public message address?",
+      "recommendation": {
+        "answer": "engineers",
+        "consequence": "Keeps the existing developer-facing module contract focused."
+      },
+      "alternatives": [
+        {
+          "answer": "operators",
+          "consequence": "Broadens terminology and requires an operations-facing contract."
+        }
+      ],
+      "context": {
+        "term": "Public audience",
+        "definitions": {
+          "engineers": "The public message is intended for engineers.",
+          "operators": "The public message is intended for operators."
+        }
+      },
+      "reversibility": "EASY",
+      "surprising": false
+    }
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "one-ticket-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-message-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

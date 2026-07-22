@@ -20,6 +20,7 @@ const INSTRUMENTAL_ROLES = Object.freeze(["test", "typecheck", "build", "observe
 const RUN_ARTIFACT_FILES = new Set([
   "advisor.json",
   "context-packet.json",
+  "human-gate.json",
   "quality-review.json",
   "remote-sync.json",
   "research.json",
@@ -55,7 +56,7 @@ const DENIED_ARTIFACT_KEYS = new Set([
 ]);
 /**
  * @param {string} targetInput
- * @param {{ requestPath?: string }} [options]
+ * @param {{ requestPath?: string, humanAnswers?: Record<string, string> }} [options]
  */
 export async function runEngineeringRun(targetInput, options = {}) {
   const target = path.resolve(targetInput);
@@ -63,7 +64,7 @@ export async function runEngineeringRun(targetInput, options = {}) {
   if (!options.requestPath) {
     return prepared.report;
   }
-  const request = await readRunRequest(target, options.requestPath);
+  const request = await readRunRequest(target, options.requestPath, options.humanAnswers);
   if (request.classification.selectedMode === "FAST") {
     return runFastTask(target, prepared, request);
   }
@@ -131,8 +132,8 @@ async function validatePreparedRuntime(target) {
   };
 }
 
-/** @param {string} target @param {string} requestPath */
-async function readRunRequest(target, requestPath) {
+/** @param {string} target @param {string} requestPath @param {Record<string, string> | undefined} humanAnswers */
+async function readRunRequest(target, requestPath, humanAnswers) {
   if (typeof requestPath !== "string" || requestPath.trim().length === 0) {
     throw new Error("Run request path must be a non-empty Target Project path.");
   }
@@ -141,7 +142,8 @@ async function readRunRequest(target, requestPath) {
   if (path.isAbsolute(requestPath) || relative === "" || relative.startsWith(`..${path.sep}`) || relative === "..") {
     throw new Error("Run request must stay within the Target Project.");
   }
-  return validateRunRequest(await readJson(absolute));
+  const request = await readJson(absolute);
+  return validateRunRequest(humanAnswers === undefined ? request : { ...request, humanAnswers });
 }
 
 /** @param {unknown} value */
@@ -272,6 +274,101 @@ function validateStandardRequest(request) {
   ) {
     throw new Error("STANDARD context paths must be unique canonical Application Core paths.");
   }
+  validateStandardDecision(request.standard.decision, request.humanAnswers);
+}
+
+/** @param {unknown} decisionValue @param {unknown} humanAnswersValue */
+function validateStandardDecision(decisionValue, humanAnswersValue) {
+  if (decisionValue === undefined) {
+    if (humanAnswersValue !== undefined) {
+      throw new Error("humanAnswers require a STANDARD decision contract.");
+    }
+    return;
+  }
+  if (!decisionValue || typeof decisionValue !== "object" || Array.isArray(decisionValue)) {
+    throw new Error("STANDARD decision must be an object.");
+  }
+  const decision = /** @type {Record<string, any>} */ (decisionValue);
+  const allowedKeys = [
+    "alternatives",
+    "context",
+    "id",
+    "question",
+    "recommendation",
+    "reversibility",
+    "surprising",
+  ];
+  if (Object.keys(decision).some((key) => !allowedKeys.includes(key))) {
+    throw new Error("STANDARD decision contains an unsupported field.");
+  }
+  const recommendation = decision.recommendation;
+  const alternatives = decision.alternatives;
+  if (
+    !isSafeEvidenceId(decision.id) ||
+    !isSingleLineText(decision.question, 240) ||
+    !isDecisionOption(recommendation) ||
+    !Array.isArray(alternatives) ||
+    alternatives.length === 0 ||
+    !alternatives.every(isDecisionOption) ||
+    !["EASY", "HARD"].includes(decision.reversibility) ||
+    typeof decision.surprising !== "boolean"
+  ) {
+    throw new Error("STANDARD decision requires one question, a recommendation, consequences, and reversibility evidence.");
+  }
+  const answers = [recommendation.answer, ...alternatives.map((option) => option.answer)];
+  if (new Set(answers).size !== answers.length) {
+    throw new Error("STANDARD decision answers must be unique.");
+  }
+  if (
+    !decision.context ||
+    typeof decision.context !== "object" ||
+    Array.isArray(decision.context) ||
+    !isSingleLineText(decision.context.term, 120) ||
+    !decision.context.definitions ||
+    typeof decision.context.definitions !== "object" ||
+    Array.isArray(decision.context.definitions) ||
+    JSON.stringify(Object.keys(decision.context.definitions).sort()) !== JSON.stringify([...answers].sort()) ||
+    !Object.values(decision.context.definitions).every((definition) => isSingleLineText(definition, 240))
+  ) {
+    throw new Error("STANDARD decision must map every answer to one durable context definition.");
+  }
+  if (humanAnswersValue === undefined) {
+    return;
+  }
+  if (!humanAnswersValue || typeof humanAnswersValue !== "object" || Array.isArray(humanAnswersValue)) {
+    throw new Error("humanAnswers must be an object when provided.");
+  }
+  const humanAnswers = /** @type {Record<string, any>} */ (humanAnswersValue);
+  if (
+    JSON.stringify(Object.keys(humanAnswers)) !== JSON.stringify([decision.id]) ||
+    !answers.includes(humanAnswers[decision.id])
+  ) {
+    throw new Error("humanAnswers must answer the active STANDARD decision with an offered answer.");
+  }
+}
+
+/** @param {unknown} value */
+function isDecisionOption(value) {
+  const option = /** @type {Record<string, any>} */ (value);
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    JSON.stringify(Object.keys(option).sort()) === JSON.stringify(["answer", "consequence"]) &&
+    isSingleLineText(option.answer, 120) &&
+    isSingleLineText(option.consequence, 240),
+  );
+}
+
+/** @param {unknown} value @param {number} maximum */
+function isSingleLineText(value, maximum) {
+  return isNonEmptyString(value) && value.length <= maximum && !/[\r\n]/u.test(value);
+}
+
+/** @param {Record<string, any>} request */
+export function standardRequestBindingHash(request) {
+  const { classification: _classification, humanAnswers: _humanAnswers, ...immutableRequest } = request;
+  return sha256(JSON.stringify(immutableRequest));
 }
 
 /** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
@@ -568,7 +665,7 @@ async function runStandardTask(target, prepared, request) {
   const commands = resolveStandardCommands(prepared.registry, request.commands);
   const taskProfile = buildTaskProfile(prepared, request, repository);
   const worktreeRoot = `${target}.engineering-worktrees`;
-  const requestHash = sha256(JSON.stringify(request));
+  const requestHash = standardRequestBindingHash(request);
   let resumable = await findResumableStandardRun(
     worktreeRoot,
     requestHash,
@@ -605,7 +702,9 @@ async function runStandardTask(target, prepared, request) {
   /** @type {{ schemaVersion: number, checks: any[] }} */
   const verification = resumable?.verification ?? { schemaVersion: 1, checks: [] };
   const artifacts = /** @type {Record<string, any>} */ (resumable?.artifacts ?? {});
-  const checkpointCommits = resumable ? checkpointCommitsInExecutionOrder(resumable.graph) : [];
+  const checkpointCommits = resumable?.graph ? checkpointCommitsInExecutionOrder(resumable.graph) : [];
+  const resumeDecisionGate = resumable?.phase === "DECISION_GATE";
+  let research;
   let specLite;
   let planned;
   /** @type {Record<string, any>} */
@@ -628,12 +727,13 @@ async function runStandardTask(target, prepared, request) {
     commandGuard,
     artifacts,
     mode: "STANDARD",
-    workerCount: resumable?.graph.tickets.reduce(
+    workerCount: resumable?.graph?.tickets.reduce(
       (/** @type {number} */ total, /** @type {any} */ ticket) => total + ticket.attempts,
       0,
     ) ?? 0,
     checkpointCommits,
     blocker: blockStandardRun,
+    requestHash,
     remoteSync: resumeRemoteSyncState(request, branch, resumable, checkpointCommits),
   });
   if (restoredFromRemote && context.remoteSync.enabled) {
@@ -647,6 +747,16 @@ async function runStandardTask(target, prepared, request) {
   }
 
   try {
+    if (resumeDecisionGate) {
+      await git(worktree, ["reset", "--hard", "HEAD"]);
+      await git(worktree, ["clean", "-fd"]);
+      await initializeCommandGuard(commandGuard, worktree, repository, branch);
+      await mkdir(artifactRoot, { recursive: true });
+      transitionState(stateHistory, "RESUMED");
+      research = artifacts["research.json"];
+      const answeredGate = await recordStandardDecision(context, request, artifacts["human-gate.json"]);
+      artifacts["human-gate.json"] = answeredGate;
+    }
     if (!resumable) {
     transitionState(stateHistory, "CLASSIFIED");
     await git(target, ["worktree", "add", "-b", branch, worktree, repository.integrationHead]);
@@ -672,7 +782,6 @@ async function runStandardTask(target, prepared, request) {
     if (researchExecution.result.exitCode !== 0) {
       return blockStandardAfterCommand(context, "REPOSITORY_RESEARCH", commands.research, researchExecution.result);
     }
-    let research;
     try {
       research = parseResearch(researchExecution.result.stdout);
     } catch {
@@ -681,6 +790,21 @@ async function runStandardTask(target, prepared, request) {
     artifacts["research.json"] = research;
     await writeJson(path.join(artifactRoot, "research.json"), research);
 
+    if (request.standard.decision) {
+      if (researchAnswersDecision(research, request.standard.decision)) {
+        return blockStandardSchema(context, "DECISION_GATE", "question-audit");
+      }
+      const humanGate = createDecisionHumanGate(
+        request.standard.decision,
+        requestHash,
+        research.facts.map((/** @type {any} */ fact) => fact.id),
+      );
+      artifacts["human-gate.json"] = humanGate;
+      return persistStandardHumanGate(context, humanGate, {}, true);
+    }
+    }
+
+    if (!resumable || resumeDecisionGate) {
     transitionState(stateHistory, "SPEC_LITE");
     specLite = {
       schemaVersion: 1,
@@ -711,6 +835,7 @@ async function runStandardTask(target, prepared, request) {
       branch,
       baseCommit: repository.integrationHead,
       requestHash,
+      decisionCommit: context.decisionCommit ?? null,
       executionOrder: [],
       tickets: planned.tickets.map((ticket) => ({
         ...ticket,
@@ -1084,9 +1209,12 @@ async function runStandardTask(target, prepared, request) {
     }
 
     const implementationChanges = await changedPaths(worktree, repository.integrationHead);
+    const decisionPaths = new Set(decisionControlledPaths(artifacts["human-gate.json"]));
     const unauthorizedPath = implementationChanges.find(
       (changedPath) =>
-        !request.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+        !request.writeLease.includes(changedPath) &&
+        !decisionPaths.has(changedPath) &&
+        !changedPath.startsWith(`${artifactPath}/`),
     );
     if (unauthorizedPath) {
       return blockStandardSchema(context, "ARTIFACT_VALIDATION", "write-lease");
@@ -1391,6 +1519,232 @@ async function blockStandardRun(context) {
   };
 }
 
+/** @param {Record<string, any>} research @param {Record<string, any>} decision */
+function researchAnswersDecision(research, decision) {
+  const normalizedQuestion = normalizeAuditText(decision.question);
+  return research.facts.some(
+    (/** @type {any} */ fact) =>
+      fact.answersDecisionQuestions?.includes(decision.id) ||
+      normalizeAuditText(fact.statement) === normalizedQuestion,
+  );
+}
+
+/** @param {unknown} value */
+function normalizeAuditText(value) {
+  return typeof value === "string"
+    ? value.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/gu, " ").trim()
+    : "";
+}
+
+/** @param {Record<string, any>} decision @param {string} requestHash @param {string[]} researchFactIds */
+function createDecisionHumanGate(decision, requestHash, researchFactIds) {
+  return createStandardHumanGate({
+    id: decision.id,
+    kind: "DECISION",
+    requestHash,
+    createdFromState: "REPOSITORY_RESEARCH",
+    researchFactIds,
+    question: {
+      prompt: decision.question,
+      recommendation: decision.recommendation,
+      alternatives: decision.alternatives,
+    },
+  });
+}
+
+/** @param {{ id: string, kind: string, requestHash: string, createdFromState: string, researchFactIds: string[], question: Record<string, any>, extra?: Record<string, any> }} input */
+function createStandardHumanGate(input) {
+  return {
+    schemaVersion: 1,
+    id: input.id,
+    kind: input.kind,
+    status: "WAITING",
+    requestHash: input.requestHash,
+    createdFromState: input.createdFromState,
+    researchFactIds: input.researchFactIds,
+    question: input.question,
+    answer: null,
+    contextPaths: [],
+    ...(input.extra ?? {}),
+  };
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>} humanGate @param {Record<string, any>} [reportExtras] @param {boolean} [checkpoint] @returns {Promise<any>} */
+async function persistStandardHumanGate(context, humanGate, reportExtras = {}, checkpoint = false) {
+  transitionState(context.stateHistory, "HUMAN_GATE");
+  const stateArtifact = runStateArtifact(
+    context.runId,
+    context.branch,
+    context.repository.integrationHead,
+    context.stateHistory,
+    false,
+    "STANDARD",
+  );
+  const resultArtifact = {
+    schemaVersion: 1,
+    status: "HUMAN_GATE",
+    terminal: false,
+    accepted: false,
+    releaseStateReached: false,
+    mode: "STANDARD",
+    branch: context.branch,
+    baseCommit: context.repository.integrationHead,
+    humanGate,
+    ...reportExtras,
+  };
+  const expectedArtifacts = {
+    ...context.artifacts,
+    "human-gate.json": humanGate,
+    "result.json": resultArtifact,
+    "state.json": stateArtifact,
+    "task-profile.json": context.taskProfile,
+    "verification.json": context.verification,
+  };
+  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
+  await Promise.all(
+    Object.entries(expectedArtifacts).map(([name, value]) =>
+      writeJson(path.join(context.artifactRoot, name), value),
+    ),
+  );
+  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
+  let head = await git(context.worktree, ["rev-parse", "HEAD"]);
+  if (checkpoint) {
+    await git(context.worktree, ["add", "--", context.artifactPath]);
+    await validateGitArtifacts(context.worktree, "index", context.artifactPath, expectedArtifacts);
+    const gateTree = await git(context.worktree, ["write-tree"]);
+    await git(context.worktree, [
+      "-c",
+      `core.hooksPath=${context.commandGuard.emptyHooks}`,
+      "commit",
+      "-m",
+      `chore: record STANDARD Human Gate ${humanGate.id} (${context.runId})`,
+    ]);
+    head = await git(context.worktree, ["rev-parse", "HEAD"]);
+    await validateCommittedTree(context.worktree, head, gateTree);
+    await validateGitArtifacts(context.worktree, head, context.artifactPath, expectedArtifacts);
+    const gateSync = /** @type {any} */ (await synchronizeRunHead(context, head, "HUMAN_GATE"));
+    if ("humanGate" in gateSync) {
+      return gateSync.humanGate;
+    }
+  }
+  await assertProtectedBranches(context.target, context.repository);
+  return {
+    schemaVersion: 1,
+    status: "HUMAN_GATE",
+    terminal: false,
+    accepted: false,
+    releaseStateReached: false,
+    taskProfile: context.taskProfile,
+    stateHistory: context.stateHistory,
+    verification: context.verification,
+    humanGate,
+    ...reportExtras,
+    run: runEvidence(
+      context.runId,
+      context.branch,
+      context.worktree,
+      context.artifactPath,
+      context.repository.integrationHead,
+      context.checkpointCommits?.at(-1) ?? null,
+      head,
+      context.workerCount ?? 0,
+      context.checkpointCommits ?? [],
+    ),
+  };
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>} request @param {Record<string, any>} gate */
+async function recordStandardDecision(context, request, gate) {
+  const decision = request.standard.decision;
+  const answer = request.humanAnswers?.[decision.id];
+  if (
+    gate?.kind !== "DECISION" ||
+    gate.id !== decision.id ||
+    gate.status !== "WAITING" ||
+    gate.requestHash !== standardRequestBindingHash(request) ||
+    !isNonEmptyString(answer)
+  ) {
+    throw new Error("Durable STANDARD decision gate does not match its human answer or request binding.");
+  }
+  const contextPath = ".engineering/CONTEXT.md";
+  const absoluteContextPath = path.join(context.worktree, ...contextPath.split("/"));
+  const marker = `<!-- engineering-loop:decision:${decision.id} -->`;
+  let contextSource = await readFile(absoluteContextPath, "utf8");
+  if (!contextSource.includes(marker)) {
+    const separator = contextSource.endsWith("\n") ? "" : "\n";
+    contextSource += `${separator}\n${marker}\n- ${decision.context.term}: ${decision.context.definitions[answer]}\n`;
+    await writeFile(absoluteContextPath, contextSource, "utf8");
+  }
+  const contextPaths = [contextPath];
+  if (decision.reversibility === "HARD" && decision.surprising === true) {
+    const adrPath = `.engineering/adrs/ADR-${decision.id}.md`;
+    const absoluteAdrPath = path.join(context.worktree, ...adrPath.split("/"));
+    await writeFile(
+      absoluteAdrPath,
+      `# ${decision.id}\n\n## Decision\n\n${decision.question}\n\nSelected: ${answer}.\n\n## Consequence\n\n${decision.context.definitions[answer]}\n`,
+      "utf8",
+    );
+    contextPaths.push(adrPath);
+  }
+  const answeredGate = {
+    ...gate,
+    status: "ANSWERED",
+    answer: { value: answer },
+    contextPaths,
+  };
+  context.artifacts["human-gate.json"] = answeredGate;
+  delete context.artifacts["result.json"];
+  transitionState(context.stateHistory, "DECISION_RECORDED");
+  const expectedArtifacts = {
+    ...context.artifacts,
+    "human-gate.json": answeredGate,
+    "state.json": runStateArtifact(
+      context.runId,
+      context.branch,
+      context.repository.integrationHead,
+      context.stateHistory,
+      false,
+      "STANDARD",
+    ),
+    "task-profile.json": context.taskProfile,
+    "verification.json": context.verification,
+  };
+  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
+  await Promise.all(
+    Object.entries(expectedArtifacts).map(([name, value]) =>
+      writeJson(path.join(context.artifactRoot, name), value),
+    ),
+  );
+  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
+  await git(context.worktree, ["add", "--", ...contextPaths, context.artifactPath]);
+  const staged = await gitNullPaths(context.worktree, ["diff", "--cached", "--name-only", "-z"]);
+  const allowed = new Set([
+    ...contextPaths,
+    `${context.artifactPath}/result.json`,
+    ...Object.keys(expectedArtifacts).map((name) => `${context.artifactPath}/${name}`),
+  ]);
+  if (staged.some((/** @type {string} */ projectPath) => !allowed.has(projectPath))) {
+    throw new Error("STANDARD decision checkpoint escaped its durable context scope.");
+  }
+  await git(context.worktree, [
+    "-c",
+    `core.hooksPath=${context.commandGuard.emptyHooks}`,
+    "commit",
+    "-m",
+    `docs: record STANDARD decision ${decision.id} (${context.runId})`,
+  ]);
+  context.decisionCommit = await git(context.worktree, ["rev-parse", "HEAD"]);
+  return answeredGate;
+}
+
+/** @param {unknown} humanGate */
+function decisionControlledPaths(humanGate) {
+  const gate = /** @type {Record<string, any> | null} */ (humanGate && typeof humanGate === "object" ? humanGate : null);
+  return gate?.kind === "DECISION" && gate.status === "ANSWERED" && Array.isArray(gate.contextPaths)
+    ? gate.contextPaths
+    : [];
+}
+
 /** @param {unknown} settingsValue */
 function validateRemoteCheckpointSyncSetting(settingsValue) {
   if (settingsValue === undefined) {
@@ -1419,70 +1773,6 @@ function validateRemoteCheckpointSyncSetting(settingsValue) {
   if (sync.remote !== undefined && !isSafeRemoteName(sync.remote)) {
     throw new Error("Remote Checkpoint Sync remote must be a safe remote name.");
   }
-}
-
-/** @param {Record<string, any>} context */
-async function humanGateForRemoteSync(context) {
-  transitionState(context.stateHistory, "HUMAN_GATE");
-  const stateArtifact = runStateArtifact(
-    context.runId,
-    context.branch,
-    context.repository.integrationHead,
-    context.stateHistory,
-    false,
-    "STANDARD",
-  );
-  const resultArtifact = {
-    schemaVersion: 1,
-    status: "HUMAN_GATE",
-    terminal: false,
-    accepted: false,
-    releaseStateReached: false,
-    mode: "STANDARD",
-    branch: context.branch,
-    baseCommit: context.repository.integrationHead,
-    blocker: context.remoteSync.blocker,
-  };
-  const expectedArtifacts = {
-    ...context.artifacts,
-    "remote-sync.json": context.remoteSync,
-    "result.json": resultArtifact,
-    "state.json": stateArtifact,
-    "task-profile.json": context.taskProfile,
-    "verification.json": context.verification,
-  };
-  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
-  await Promise.all(
-    Object.entries(expectedArtifacts).map(([name, value]) =>
-      writeJson(path.join(context.artifactRoot, name), value),
-    ),
-  );
-  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
-  await assertProtectedBranches(context.target, context.repository);
-  const head = await git(context.worktree, ["rev-parse", "HEAD"]);
-  return {
-    schemaVersion: 1,
-    status: "HUMAN_GATE",
-    terminal: false,
-    accepted: false,
-    releaseStateReached: false,
-    taskProfile: context.taskProfile,
-    stateHistory: context.stateHistory,
-    verification: context.verification,
-    blocker: context.remoteSync.blocker,
-    remoteSync: context.remoteSync,
-    run: runEvidence(
-      context.runId,
-      context.branch,
-      context.worktree,
-      context.artifactPath,
-      context.repository.integrationHead,
-      context.checkpointCommits?.at(-1) ?? null,
-      head,
-      context.workerCount ?? 0,
-      context.checkpointCommits ?? [],
-    ),
-  };
 }
 
 /** @param {string} target @param {string} integrationBranch @param {string} stableBranch */
@@ -2017,14 +2307,55 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
     const worktree = path.join(worktreeRoot, runId);
     const artifactRoot = path.join(worktree, ".engineering", "runs", runId);
     try {
-      const [graph, state, verification] = await Promise.all([
-        readJson(path.join(artifactRoot, "ticket-graph.json")),
+      const [state, verification] = await Promise.all([
         readJson(path.join(artifactRoot, "state.json")),
         readJson(path.join(artifactRoot, "verification.json")),
       ]);
+      const [graph, humanGate] = await Promise.all([
+        tryReadJson(path.join(artifactRoot, "ticket-graph.json")),
+        tryReadJson(path.join(artifactRoot, "human-gate.json")),
+      ]);
+      if (
+        !graph &&
+        state.mode === "STANDARD" &&
+        state.terminal === false &&
+        state.runId === runId &&
+        state.baseCommit === baseCommit &&
+        humanGate?.kind === "DECISION" &&
+        humanGate.status === "WAITING" &&
+        humanGate.requestHash === requestHash
+      ) {
+        const [head, currentBranch, research] = await Promise.all([
+          git(worktree, ["rev-parse", "HEAD"]),
+          git(worktree, ["branch", "--show-current"]),
+          readJson(path.join(artifactRoot, "research.json")),
+        ]);
+        const [parents, subject] = await Promise.all([
+          git(worktree, ["show", "-s", "--format=%P", head]),
+          git(worktree, ["show", "-s", "--format=%s", head]),
+        ]);
+        if (
+          currentBranch !== state.branch ||
+          parents !== baseCommit ||
+          !subject.includes(`record STANDARD Human Gate ${humanGate.id}`)
+        ) {
+          throw new Error(`Resumable STANDARD decision gate ${runId} does not match its durable base.`);
+        }
+        candidates.push({
+          phase: "DECISION_GATE",
+          runId,
+          branch: state.branch,
+          graph: null,
+          state,
+          verification,
+          artifacts: { "human-gate.json": humanGate, "research.json": research },
+        });
+        continue;
+      }
       if (
         state.mode !== "STANDARD" ||
         state.terminal !== false ||
+        !graph ||
         graph.schemaVersion !== 1 ||
         graph.runId !== runId ||
         graph.requestHash !== requestHash ||
@@ -2042,9 +2373,9 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
       if (currentBranch !== graph.branch) {
         throw new Error(`Resumable STANDARD worktree ${runId} is on an unexpected branch.`);
       }
-      await reconcileCheckpointFromHead(graph, head, baseCommit, worktree, artifactRoot);
+      await reconcileCheckpointFromHead(graph, head, graph.decisionCommit ?? baseCommit, worktree, artifactRoot);
       const completedCommits = checkpointCommitsInExecutionOrder(graph);
-      if ((completedCommits.at(-1) ?? baseCommit) !== head) {
+      if ((completedCommits.at(-1) ?? graph.decisionCommit ?? baseCommit) !== head) {
         throw new Error(`Resumable STANDARD worktree ${runId} does not match its durable checkpoint.`);
       }
       const artifacts = /** @type {Record<string, any>} */ ({});
@@ -2061,6 +2392,9 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
       const remoteSync = await tryReadJson(path.join(artifactRoot, "remote-sync.json"));
       if (remoteSync) {
         artifacts["remote-sync.json"] = remoteSync;
+      }
+      if (humanGate) {
+        artifacts["human-gate.json"] = humanGate;
       }
       candidates.push({ runId, branch: graph.branch, graph, state, verification, artifacts });
     } catch (error) {
@@ -2099,30 +2433,68 @@ async function restoreRemoteStandardRun(target, worktreeRoot, requestHash, baseC
     const artifactPath = `.engineering/runs/${runId}`;
     let matchedRequest = false;
     try {
-      const [graph, state] = await Promise.all([
-        readGitJson(target, remoteRef, `${artifactPath}/ticket-graph.json`),
+      const [graph, state, humanGate] = await Promise.all([
+        tryReadGitJson(target, remoteRef, `${artifactPath}/ticket-graph.json`),
         readGitJson(target, remoteRef, `${artifactPath}/state.json`),
+        tryReadGitJson(target, remoteRef, `${artifactPath}/human-gate.json`),
       ]);
-      if (
-        graph.schemaVersion === 1 &&
-        graph.runId === runId &&
-        graph.branch === branch &&
-        graph.requestHash === requestHash &&
-        graph.baseCommit === baseCommit &&
+      const baseStateMatches =
         state.schemaVersion === 1 &&
         state.runId === runId &&
         state.branch === branch &&
         state.baseCommit === baseCommit &&
         state.mode === "STANDARD" &&
-        state.terminal === false
+        state.terminal === false;
+      if (
+        !graph &&
+        baseStateMatches &&
+        humanGate?.kind === "DECISION" &&
+        humanGate.status === "WAITING" &&
+        humanGate.requestHash === requestHash
+      ) {
+        matchedRequest = true;
+        const [parents, subject] = await Promise.all([
+          git(target, ["show", "-s", "--format=%P", remoteRef]),
+          git(target, ["show", "-s", "--format=%s", remoteRef]),
+        ]);
+        const gateChanged = await git(target, ["diff", "--name-only", `${baseCommit}..${remoteRef}`]);
+        const gateChangedPaths = gateChanged === "" ? [] : gateChanged.split(/\r?\n/u);
+        if (
+          parents !== baseCommit ||
+          !subject.includes(`record STANDARD Human Gate ${humanGate.id}`) ||
+          gateChangedPaths.some((/** @type {string} */ changedPath) => !changedPath.startsWith(`${artifactPath}/`))
+        ) {
+          throw new Error("Remote STANDARD decision gate does not match its durable base.");
+        }
+        await validateRemoteDecisionGateArtifacts(
+          target,
+          remoteRef,
+          artifactPath,
+          humanGate,
+          state,
+        );
+        candidates.push({ branch, remoteRef, runId });
+        continue;
+      }
+      if (
+        graph &&
+        graph.schemaVersion === 1 &&
+        graph.runId === runId &&
+        graph.branch === branch &&
+        graph.requestHash === requestHash &&
+        graph.baseCommit === baseCommit &&
+        baseStateMatches
       ) {
         matchedRequest = true;
         const ancestor = await tryGit(target, ["merge-base", "--is-ancestor", baseCommit, remoteRef]);
         const changed = await git(target, ["diff", "--name-only", `${baseCommit}..${remoteRef}`]);
         const changedPaths = changed === "" ? [] : changed.split(/\r?\n/u);
+        const controlledDecisionPaths = new Set(decisionControlledPaths(humanGate));
         const outsideDurableScope = changedPaths.find(
           (/** @type {string} */ changedPath) =>
-            !writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+            !writeLease.includes(changedPath) &&
+            !controlledDecisionPaths.has(changedPath) &&
+            !changedPath.startsWith(`${artifactPath}/`),
         );
         if (ancestor === null || outsideDurableScope) {
           throw new Error("Remote STANDARD checkpoint escaped its base or Write Lease.");
@@ -2170,6 +2542,12 @@ async function restoreRemoteStandardRun(target, worktreeRoot, requestHash, baseC
 /** @param {string} cwd @param {string} revision @param {string} projectPath */
 async function readGitJson(cwd, revision, projectPath) {
   return JSON.parse(await git(cwd, ["show", `${revision}:${projectPath}`]));
+}
+
+/** @param {string} cwd @param {string} revision @param {string} projectPath */
+async function tryReadGitJson(cwd, revision, projectPath) {
+  const source = await tryGit(cwd, ["show", `${revision}:${projectPath}`]);
+  return source === null ? null : JSON.parse(source);
 }
 
 /** @param {Record<string, any>} request @param {string} branch */
@@ -2235,16 +2613,8 @@ function validateRemoteSyncArtifact(value, remote, branch, checkpointCommits) {
   }
 }
 
-/** @param {string} target @param {string} revision @param {string} artifactPath @param {Record<string, any>} graph @param {Record<string, any>} state @param {string} remote @param {string} branch */
-async function validateRemoteCheckpointArtifacts(
-  target,
-  revision,
-  artifactPath,
-  graph,
-  state,
-  remote,
-  branch,
-) {
+/** @param {string} target @param {string} revision @param {string} artifactPath */
+async function remoteRunArtifactNames(target, revision, artifactPath) {
   const tree = await git(target, [
     "ls-tree",
     "-r",
@@ -2260,15 +2630,55 @@ async function validateRemoteCheckpointArtifacts(
   if (entries.some((/** @type {any} */ entry) => !entry || entry.mode !== "100644" || entry.type !== "blob")) {
     throw new Error("Remote STANDARD checkpoint contains a non-regular Run Artifact.");
   }
-  const actualNames = entries
+  return entries
     .map((/** @type {any} */ entry) => entry.path.slice(`${artifactPath}/`.length))
     .sort();
-  const expectedWithoutSync = [...STANDARD_CHECKPOINT_ARTIFACT_FILES].sort();
-  const expectedWithSync = [...STANDARD_CHECKPOINT_ARTIFACT_FILES, "remote-sync.json"].sort();
-  if (
-    JSON.stringify(actualNames) !== JSON.stringify(expectedWithoutSync) &&
-    JSON.stringify(actualNames) !== JSON.stringify(expectedWithSync)
-  ) {
+}
+
+/** @param {string} target @param {string} revision @param {string} artifactPath @param {Record<string, any>} humanGate @param {Record<string, any>} state */
+async function validateRemoteDecisionGateArtifacts(target, revision, artifactPath, humanGate, state) {
+  const actualNames = await remoteRunArtifactNames(target, revision, artifactPath);
+  const expected = [
+    "human-gate.json",
+    "research.json",
+    "result.json",
+    "state.json",
+    "task-profile.json",
+    "verification.json",
+  ].sort();
+  if (JSON.stringify(actualNames) !== JSON.stringify(expected)) {
+    throw new Error("Remote STANDARD decision gate Run Artifact set is not allowlisted.");
+  }
+  for (const name of actualNames) {
+    const artifact = await readGitJson(target, revision, `${artifactPath}/${name}`);
+    validateArtifactValue(artifact, name);
+    if (name === "human-gate.json" && JSON.stringify(artifact) !== JSON.stringify(humanGate)) {
+      throw new Error("Remote STANDARD decision gate changed during validation.");
+    }
+    if (name === "state.json" && JSON.stringify(artifact) !== JSON.stringify(state)) {
+      throw new Error("Remote STANDARD decision gate state changed during validation.");
+    }
+  }
+}
+
+/** @param {string} target @param {string} revision @param {string} artifactPath @param {Record<string, any>} graph @param {Record<string, any>} state @param {string} remote @param {string} branch */
+async function validateRemoteCheckpointArtifacts(
+  target,
+  revision,
+  artifactPath,
+  graph,
+  state,
+  remote,
+  branch,
+) {
+  const actualNames = await remoteRunArtifactNames(target, revision, artifactPath);
+  const allowedArtifactSets = [
+    [],
+    ["remote-sync.json"],
+    ["human-gate.json"],
+    ["human-gate.json", "remote-sync.json"],
+  ].map((optional) => [...STANDARD_CHECKPOINT_ARTIFACT_FILES, ...optional].sort());
+  if (!allowedArtifactSets.some((expected) => JSON.stringify(actualNames) === JSON.stringify(expected))) {
     throw new Error("Remote STANDARD checkpoint Run Artifact set is not allowlisted.");
   }
   for (const name of actualNames) {
@@ -2315,7 +2725,7 @@ export function assertRemoteSyncPolicy(policy) {
   }
 }
 
-/** @param {Record<string, any>} context @param {string} localHead @param {string} stage */
+/** @param {Record<string, any>} context @param {string} localHead @param {string} stage @returns {Promise<any>} */
 async function synchronizeRunHead(context, localHead, stage) {
   if (!context.remoteSync.enabled) {
     return {};
@@ -2389,6 +2799,8 @@ async function synchronizeRunHead(context, localHead, stage) {
         });
       }
     }
+  } else if (stage === "HUMAN_GATE") {
+    context.remoteSync.humanGate = evidence;
   } else {
     context.remoteSync.readyForHuman = evidence;
   }
@@ -2399,7 +2811,7 @@ async function synchronizeRunHead(context, localHead, stage) {
   return { evidence };
 }
 
-/** @param {Record<string, any>} context @param {string} localHead @param {string | null} remoteHead @param {string} reason */
+/** @param {Record<string, any>} context @param {string} localHead @param {string | null} remoteHead @param {string} reason @returns {Promise<any>} */
 async function remoteSyncHumanGate(context, localHead, remoteHead, reason) {
   context.remoteSync.status = "HUMAN_GATE";
   context.remoteSync.blocker = {
@@ -2409,8 +2821,35 @@ async function remoteSyncHumanGate(context, localHead, remoteHead, reason) {
     localHead,
     remoteHead,
   };
+  const humanGate = createStandardHumanGate({
+    id: `REMOTE-SYNC-${reason}`,
+    kind: "REMOTE_SYNC",
+    requestHash: context.requestHash,
+    createdFromState: context.stateHistory.at(-1)?.state ?? "CHECKPOINT",
+    researchFactIds: [],
+    question: {
+      prompt: "How should the divergent Remote Checkpoint Sync histories be reconciled?",
+      recommendation: {
+        answer: "inspect-and-reconcile",
+        consequence: "Preserves both local and remote histories for an explicit human reconciliation.",
+      },
+      alternatives: [
+        {
+          answer: "stop-sync",
+          consequence: "Leaves the run paused locally without overwriting the remote branch.",
+        },
+      ],
+    },
+    extra: { blocker: context.remoteSync.blocker },
+  });
+  context.artifacts["human-gate.json"] = humanGate;
   context.artifacts["remote-sync.json"] = context.remoteSync;
-  return { humanGate: await humanGateForRemoteSync(context) };
+  return {
+    humanGate: await persistStandardHumanGate(context, humanGate, {
+      blocker: context.remoteSync.blocker,
+      remoteSync: context.remoteSync,
+    }),
+  };
 }
 
 /** @param {string} worktree @param {string} remote @param {string} branch */
@@ -2541,7 +2980,10 @@ function parseResearch(source) {
         isNonEmptyString(fact.statement) &&
         Array.isArray(fact.evidence) &&
         fact.evidence.length > 0 &&
-        fact.evidence.every(isSafeLeasedPath),
+        fact.evidence.every(isSafeLeasedPath) &&
+        Array.isArray(fact.answersDecisionQuestions) &&
+        new Set(fact.answersDecisionQuestions).size === fact.answersDecisionQuestions.length &&
+        fact.answersDecisionQuestions.every(isSafeEvidenceId),
     )
   ) {
     throw new Error("Repository research requires evidence-backed facts.");
@@ -3176,6 +3618,8 @@ async function tryReadJson(file) {
 
 export async function main(args = process.argv.slice(2)) {
   let requestPath;
+  /** @type {Record<string, string> | undefined} */
+  let humanAnswers;
   let smoke = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -3188,11 +3632,25 @@ export async function main(args = process.argv.slice(2)) {
       index += 1;
       continue;
     }
+    if (argument === "--human-answer" && !smoke && !humanAnswers && args[index + 1]) {
+      const separator = args[index + 1].indexOf("=");
+      const id = separator > 0 ? args[index + 1].slice(0, separator) : "";
+      const answer = separator > 0 ? args[index + 1].slice(separator + 1) : "";
+      if (!isSafeEvidenceId(id) || !isSingleLineText(answer, 120)) {
+        throw new Error("--human-answer must use DECISION-ID=answer with safe single-line values.");
+      }
+      humanAnswers = { [id]: answer };
+      index += 1;
+      continue;
+    }
     throw new Error(`Unknown Project Runtime argument: ${args.slice(index).join(" ")}`);
   }
   const runtimeDirectory = path.dirname(fileURLToPath(import.meta.url));
   const target = path.resolve(runtimeDirectory, "..", "..");
-  const report = await runEngineeringRun(target, requestPath ? { requestPath } : undefined);
+  const report = await runEngineeringRun(
+    target,
+    requestPath ? { requestPath, ...(humanAnswers ? { humanAnswers } : {}) } : undefined,
+  );
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   return report.status === "BLOCKED" || report.status === "HUMAN_GATE" ? 1 : 0;
 }
