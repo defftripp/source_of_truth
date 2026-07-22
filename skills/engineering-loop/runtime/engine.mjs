@@ -21,6 +21,7 @@ const RUN_ARTIFACT_FILES = new Set([
   "advisor.json",
   "context-packet.json",
   "quality-review.json",
+  "remote-sync.json",
   "research.json",
   "result.json",
   "spec-lite.json",
@@ -29,6 +30,17 @@ const RUN_ARTIFACT_FILES = new Set([
   "task-profile.json",
   "ticket.json",
   "ticket-graph.json",
+  "verification.json",
+]);
+const STANDARD_CHECKPOINT_ARTIFACT_FILES = Object.freeze([
+  "advisor.json",
+  "context-packet.json",
+  "research.json",
+  "spec-lite.json",
+  "state.json",
+  "task-profile.json",
+  "ticket-graph.json",
+  "ticket.json",
   "verification.json",
 ]);
 const DENIED_ARTIFACT_KEYS = new Set([
@@ -164,6 +176,7 @@ function validateRunRequest(value) {
   if (request.repository.integrationBranch === request.repository.stableBranch) {
     throw new Error("Integration and stable branches must be distinct.");
   }
+  validateRemoteCheckpointSyncSetting(request.settings);
   if (
     !Array.isArray(request.writeLease) ||
     request.writeLease.length === 0 ||
@@ -556,11 +569,32 @@ async function runStandardTask(target, prepared, request) {
   const taskProfile = buildTaskProfile(prepared, request, repository);
   const worktreeRoot = `${target}.engineering-worktrees`;
   const requestHash = sha256(JSON.stringify(request));
-  const resumable = await findResumableStandardRun(
+  let resumable = await findResumableStandardRun(
     worktreeRoot,
     requestHash,
     repository.integrationHead,
   );
+  let restoredFromRemote = false;
+  if (!resumable && request.settings?.remoteCheckpointSync?.enabled === true) {
+    restoredFromRemote = await restoreRemoteStandardRun(
+      target,
+      worktreeRoot,
+      requestHash,
+      repository.integrationHead,
+      request.settings.remoteCheckpointSync.remote,
+      request.writeLease,
+    );
+    if (restoredFromRemote) {
+      resumable = await findResumableStandardRun(
+        worktreeRoot,
+        requestHash,
+        repository.integrationHead,
+      );
+      if (!resumable) {
+        throw new Error("Fetched STANDARD Run Branch could not be restored from durable state.");
+      }
+    }
+  }
   const runId = resumable?.runId ?? createRunId();
   const branch = resumable?.branch ?? `run/standard/${runId}`;
   const worktree = path.join(worktreeRoot, runId);
@@ -571,6 +605,7 @@ async function runStandardTask(target, prepared, request) {
   /** @type {{ schemaVersion: number, checks: any[] }} */
   const verification = resumable?.verification ?? { schemaVersion: 1, checks: [] };
   const artifacts = /** @type {Record<string, any>} */ (resumable?.artifacts ?? {});
+  const checkpointCommits = resumable ? checkpointCommitsInExecutionOrder(resumable.graph) : [];
   let specLite;
   let planned;
   /** @type {Record<string, any>} */
@@ -597,9 +632,19 @@ async function runStandardTask(target, prepared, request) {
       (/** @type {number} */ total, /** @type {any} */ ticket) => total + ticket.attempts,
       0,
     ) ?? 0,
-    checkpointCommits: resumable ? checkpointCommitsInExecutionOrder(resumable.graph) : [],
+    checkpointCommits,
     blocker: blockStandardRun,
+    remoteSync: resumeRemoteSyncState(request, branch, resumable, checkpointCommits),
   });
+  if (restoredFromRemote && context.remoteSync.enabled) {
+    context.remoteSync.status = "PASS";
+    context.remoteSync.restoredFromRemote = true;
+    context.remoteSync.resume = {
+      status: "PASS",
+      remoteHead: await remoteBranchHead(worktree, context.remoteSync.remote, branch),
+    };
+    artifacts["remote-sync.json"] = context.remoteSync;
+  }
 
   try {
     if (!resumable) {
@@ -748,6 +793,17 @@ async function runStandardTask(target, prepared, request) {
       ]);
     }
 
+    if (resumable && context.remoteSync.enabled && context.checkpointCommits.length > 0) {
+      const resumedCheckpointSync = await synchronizeRunHead(
+        context,
+        context.checkpointCommits.at(-1),
+        "CHECKPOINT",
+      );
+      if ("humanGate" in resumedCheckpointSync) {
+        return resumedCheckpointSync.humanGate;
+      }
+    }
+
     while (ticketGraph.tickets.some((/** @type {any} */ ticket) => ticket.status !== "COMPLETE")) {
       const frontier = selectDeterministicFrontier(
         ticketGraph.tickets,
@@ -786,6 +842,7 @@ async function runStandardTask(target, prepared, request) {
         verificationIds: ticket.verificationIds,
         contextPaths: ticket.contextPaths,
         writeLease: ticket.writeLease,
+        resumedFromRemote: restoredFromRemote,
         rootWriter: false,
         workerMayCommit: false,
         workerMaySpawnSubagents: false,
@@ -936,6 +993,10 @@ async function runStandardTask(target, prepared, request) {
           "STANDARD",
         ),
       ]);
+      const checkpointSync = await synchronizeRunHead(context, checkpointCommit, "CHECKPOINT");
+      if ("humanGate" in checkpointSync) {
+        return checkpointSync.humanGate;
+      }
     }
 
     transitionState(stateHistory, "SPEC_REVIEW");
@@ -1101,6 +1162,10 @@ async function runStandardTask(target, prepared, request) {
     const head = await git(worktree, ["rev-parse", "HEAD"]);
     await validateCommittedTree(worktree, head, terminalTree);
     await validateGitArtifacts(worktree, head, artifactPath, terminalArtifacts);
+    const terminalSync = await synchronizeRunHead(context, head, "READY_FOR_HUMAN");
+    if ("humanGate" in terminalSync) {
+      return terminalSync.humanGate;
+    }
     transitionState(stateHistory, "READY_FOR_HUMAN");
     await assertProtectedBranches(target, repository);
     return {
@@ -1117,6 +1182,7 @@ async function runStandardTask(target, prepared, request) {
       specReview,
       qualityReview,
       verification,
+      ...(context.remoteSync.enabled ? { remoteSync: context.remoteSync } : {}),
       run: runEvidence(
         runId,
         branch,
@@ -1311,6 +1377,100 @@ async function blockStandardRun(context) {
     stateHistory: context.stateHistory,
     verification: context.verification,
     failure: context.failure,
+    run: runEvidence(
+      context.runId,
+      context.branch,
+      context.worktree,
+      context.artifactPath,
+      context.repository.integrationHead,
+      context.checkpointCommits?.at(-1) ?? null,
+      head,
+      context.workerCount ?? 0,
+      context.checkpointCommits ?? [],
+    ),
+  };
+}
+
+/** @param {unknown} settingsValue */
+function validateRemoteCheckpointSyncSetting(settingsValue) {
+  if (settingsValue === undefined) {
+    return;
+  }
+  if (!settingsValue || typeof settingsValue !== "object" || Array.isArray(settingsValue)) {
+    throw new Error("settings must be an object when provided.");
+  }
+  const settings = /** @type {Record<string, any>} */ (settingsValue);
+  if (Object.keys(settings).some((key) => key !== "remoteCheckpointSync")) {
+    throw new Error("settings contains an unsupported run setting.");
+  }
+  const sync = settings.remoteCheckpointSync;
+  if (!sync || typeof sync !== "object" || Array.isArray(sync)) {
+    throw new Error("settings.remoteCheckpointSync must be an object.");
+  }
+  if (Object.keys(sync).some((key) => !["enabled", "remote"].includes(key))) {
+    throw new Error("settings.remoteCheckpointSync contains an unsupported field.");
+  }
+  if (typeof sync.enabled !== "boolean") {
+    throw new Error("settings.remoteCheckpointSync.enabled must be boolean.");
+  }
+  if (sync.enabled && !isSafeRemoteName(sync.remote)) {
+    throw new Error("Enabled Remote Checkpoint Sync requires a safe remote name.");
+  }
+  if (sync.remote !== undefined && !isSafeRemoteName(sync.remote)) {
+    throw new Error("Remote Checkpoint Sync remote must be a safe remote name.");
+  }
+}
+
+/** @param {Record<string, any>} context */
+async function humanGateForRemoteSync(context) {
+  transitionState(context.stateHistory, "HUMAN_GATE");
+  const stateArtifact = runStateArtifact(
+    context.runId,
+    context.branch,
+    context.repository.integrationHead,
+    context.stateHistory,
+    false,
+    "STANDARD",
+  );
+  const resultArtifact = {
+    schemaVersion: 1,
+    status: "HUMAN_GATE",
+    terminal: false,
+    accepted: false,
+    releaseStateReached: false,
+    mode: "STANDARD",
+    branch: context.branch,
+    baseCommit: context.repository.integrationHead,
+    blocker: context.remoteSync.blocker,
+  };
+  const expectedArtifacts = {
+    ...context.artifacts,
+    "remote-sync.json": context.remoteSync,
+    "result.json": resultArtifact,
+    "state.json": stateArtifact,
+    "task-profile.json": context.taskProfile,
+    "verification.json": context.verification,
+  };
+  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
+  await Promise.all(
+    Object.entries(expectedArtifacts).map(([name, value]) =>
+      writeJson(path.join(context.artifactRoot, name), value),
+    ),
+  );
+  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
+  await assertProtectedBranches(context.target, context.repository);
+  const head = await git(context.worktree, ["rev-parse", "HEAD"]);
+  return {
+    schemaVersion: 1,
+    status: "HUMAN_GATE",
+    terminal: false,
+    accepted: false,
+    releaseStateReached: false,
+    taskProfile: context.taskProfile,
+    stateHistory: context.stateHistory,
+    verification: context.verification,
+    blocker: context.remoteSync.blocker,
+    remoteSync: context.remoteSync,
     run: runEvidence(
       context.runId,
       context.branch,
@@ -1898,6 +2058,10 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
       ]) {
         artifacts[name] = await readJson(path.join(artifactRoot, name));
       }
+      const remoteSync = await tryReadJson(path.join(artifactRoot, "remote-sync.json"));
+      if (remoteSync) {
+        artifacts["remote-sync.json"] = remoteSync;
+      }
       candidates.push({ runId, branch: graph.branch, graph, state, verification, artifacts });
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -1910,6 +2074,349 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
     throw new Error("Multiple resumable STANDARD runs match the same request.");
   }
   return candidates[0] ?? null;
+}
+
+/** @param {string} target @param {string} worktreeRoot @param {string} requestHash @param {string} baseCommit @param {string} remote @param {string[]} writeLease */
+async function restoreRemoteStandardRun(target, worktreeRoot, requestHash, baseCommit, remote, writeLease) {
+  if (!isSafeRemoteName(remote)) {
+    throw new Error("Remote STANDARD resume requires a safe remote name.");
+  }
+  await git(target, ["fetch", remote, "--prune"]);
+  const remoteNamespace = `refs/remotes/${remote}/run/standard`;
+  const output = await git(target, ["for-each-ref", "--format=%(refname)", remoteNamespace]);
+  const refs = output === "" ? [] : output.split(/\r?\n/u);
+  const candidates = [];
+  for (const remoteRef of refs) {
+    const branchPrefix = `refs/remotes/${remote}/`;
+    if (!remoteRef.startsWith(branchPrefix)) {
+      continue;
+    }
+    const branch = remoteRef.slice(branchPrefix.length);
+    const runId = branch.split("/").at(-1);
+    if (!isSafeBranchName(branch) || !isSafeEvidenceId(runId)) {
+      continue;
+    }
+    const artifactPath = `.engineering/runs/${runId}`;
+    let matchedRequest = false;
+    try {
+      const [graph, state] = await Promise.all([
+        readGitJson(target, remoteRef, `${artifactPath}/ticket-graph.json`),
+        readGitJson(target, remoteRef, `${artifactPath}/state.json`),
+      ]);
+      if (
+        graph.schemaVersion === 1 &&
+        graph.runId === runId &&
+        graph.branch === branch &&
+        graph.requestHash === requestHash &&
+        graph.baseCommit === baseCommit &&
+        state.schemaVersion === 1 &&
+        state.runId === runId &&
+        state.branch === branch &&
+        state.baseCommit === baseCommit &&
+        state.mode === "STANDARD" &&
+        state.terminal === false
+      ) {
+        matchedRequest = true;
+        const ancestor = await tryGit(target, ["merge-base", "--is-ancestor", baseCommit, remoteRef]);
+        const changed = await git(target, ["diff", "--name-only", `${baseCommit}..${remoteRef}`]);
+        const changedPaths = changed === "" ? [] : changed.split(/\r?\n/u);
+        const outsideDurableScope = changedPaths.find(
+          (/** @type {string} */ changedPath) =>
+            !writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
+        );
+        if (ancestor === null || outsideDurableScope) {
+          throw new Error("Remote STANDARD checkpoint escaped its base or Write Lease.");
+        }
+        await validateRemoteCheckpointArtifacts(
+          target,
+          remoteRef,
+          artifactPath,
+          graph,
+          state,
+          remote,
+          branch,
+        );
+        candidates.push({ branch, remoteRef, runId });
+      }
+    } catch (error) {
+      if (matchedRequest) {
+        throw error;
+      }
+      continue;
+    }
+  }
+  if (candidates.length > 1) {
+    throw new Error("Multiple remote STANDARD runs match the same request.");
+  }
+  const candidate = candidates[0];
+  if (!candidate) {
+    return false;
+  }
+  await mkdir(worktreeRoot, { recursive: true });
+  const worktree = path.join(worktreeRoot, candidate.runId);
+  const localRef = await tryGit(target, ["rev-parse", "--verify", `refs/heads/${candidate.branch}`]);
+  if (localRef) {
+    const remoteHead = await git(target, ["rev-parse", candidate.remoteRef]);
+    if (localRef !== remoteHead) {
+      throw new Error("Local Run Branch diverges from the resumable remote checkpoint.");
+    }
+    await git(target, ["worktree", "add", worktree, candidate.branch]);
+  } else {
+    await git(target, ["worktree", "add", "-b", candidate.branch, worktree, candidate.remoteRef]);
+  }
+  return true;
+}
+
+/** @param {string} cwd @param {string} revision @param {string} projectPath */
+async function readGitJson(cwd, revision, projectPath) {
+  return JSON.parse(await git(cwd, ["show", `${revision}:${projectPath}`]));
+}
+
+/** @param {Record<string, any>} request @param {string} branch */
+function createRemoteSyncState(request, branch) {
+  const setting = request.settings?.remoteCheckpointSync;
+  if (setting?.enabled !== true) {
+    return { enabled: false };
+  }
+  return {
+    schemaVersion: 1,
+    enabled: true,
+    status: "PENDING",
+    remote: setting.remote,
+    branch,
+    checkpoints: [],
+  };
+}
+
+/** @param {Record<string, any>} request @param {string} branch @param {Record<string, any> | null} resumable @param {string[]} checkpointCommits */
+function resumeRemoteSyncState(request, branch, resumable, checkpointCommits) {
+  const state = /** @type {Record<string, any>} */ (createRemoteSyncState(request, branch));
+  if (!state.enabled || !resumable) {
+    return state;
+  }
+  const durable = resumable.artifacts?.["remote-sync.json"];
+  if (durable !== undefined) {
+    validateRemoteSyncArtifact(durable, state.remote, branch, checkpointCommits);
+    Object.assign(state, durable);
+  }
+  return state;
+}
+
+/** @param {unknown} value @param {string} remote @param {string} branch @param {string[]} checkpointCommits */
+function validateRemoteSyncArtifact(value, remote, branch, checkpointCommits) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Durable Remote Checkpoint Sync evidence must be an object.");
+  }
+  const artifact = /** @type {Record<string, any>} */ (value);
+  if (
+    artifact.schemaVersion !== 1 ||
+    artifact.enabled !== true ||
+    artifact.remote !== remote ||
+    artifact.branch !== branch ||
+    !Array.isArray(artifact.checkpoints) ||
+    !artifact.checkpoints.every(
+      (/** @type {any} */ entry) =>
+        entry?.stage === "CHECKPOINT" &&
+        entry.status === "PASS" &&
+        /^[a-f0-9]{40}$/u.test(entry.localHead) &&
+        entry.remoteHead === entry.localHead,
+    )
+  ) {
+    throw new Error("Durable Remote Checkpoint Sync evidence is invalid or request-unbound.");
+  }
+  const evidenceHeads = artifact.checkpoints.map(
+    (/** @type {any} */ entry) => entry.localHead,
+  );
+  if (
+    JSON.stringify(evidenceHeads) !==
+    JSON.stringify(checkpointCommits.slice(0, evidenceHeads.length))
+  ) {
+    throw new Error("Durable Remote Checkpoint Sync evidence is not graph-ordered.");
+  }
+}
+
+/** @param {string} target @param {string} revision @param {string} artifactPath @param {Record<string, any>} graph @param {Record<string, any>} state @param {string} remote @param {string} branch */
+async function validateRemoteCheckpointArtifacts(
+  target,
+  revision,
+  artifactPath,
+  graph,
+  state,
+  remote,
+  branch,
+) {
+  const tree = await git(target, [
+    "ls-tree",
+    "-r",
+    "--format=%(objectmode) %(objecttype) %(path)",
+    revision,
+    "--",
+    artifactPath,
+  ]);
+  const entries = tree === "" ? [] : tree.split(/\r?\n/u).map((/** @type {string} */ line) => {
+    const match = /^(\d+) (\S+) (.+)$/u.exec(line);
+    return match ? { mode: match[1], type: match[2], path: match[3] } : null;
+  });
+  if (entries.some((/** @type {any} */ entry) => !entry || entry.mode !== "100644" || entry.type !== "blob")) {
+    throw new Error("Remote STANDARD checkpoint contains a non-regular Run Artifact.");
+  }
+  const actualNames = entries
+    .map((/** @type {any} */ entry) => entry.path.slice(`${artifactPath}/`.length))
+    .sort();
+  const expectedWithoutSync = [...STANDARD_CHECKPOINT_ARTIFACT_FILES].sort();
+  const expectedWithSync = [...STANDARD_CHECKPOINT_ARTIFACT_FILES, "remote-sync.json"].sort();
+  if (
+    JSON.stringify(actualNames) !== JSON.stringify(expectedWithoutSync) &&
+    JSON.stringify(actualNames) !== JSON.stringify(expectedWithSync)
+  ) {
+    throw new Error("Remote STANDARD checkpoint Run Artifact set is not allowlisted.");
+  }
+  for (const name of actualNames) {
+    const artifact = await readGitJson(target, revision, `${artifactPath}/${name}`);
+    validateArtifactValue(artifact, name);
+    if (name === "ticket-graph.json" && JSON.stringify(artifact) !== JSON.stringify(graph)) {
+      throw new Error("Remote STANDARD checkpoint graph changed during validation.");
+    }
+    if (name === "state.json" && JSON.stringify(artifact) !== JSON.stringify(state)) {
+      throw new Error("Remote STANDARD checkpoint state changed during validation.");
+    }
+    if (name === "remote-sync.json") {
+      validateRemoteSyncArtifact(
+        artifact,
+        remote,
+        branch,
+        checkpointCommitsInExecutionOrder(graph),
+      );
+    }
+  }
+}
+
+/**
+ * @param {{ action: string, force: boolean, remote: string, runBranch: string, currentBranch: string, integrationBranch: string, stableBranch: string }} policy
+ */
+export function assertRemoteSyncPolicy(policy) {
+  if (policy.action !== "push") {
+    throw new Error("Remote Checkpoint Sync permits only the push action.");
+  }
+  if (policy.force !== false) {
+    throw new Error("Remote Checkpoint Sync forbids force-push.");
+  }
+  if (!isSafeRemoteName(policy.remote) || !isSafeBranchName(policy.runBranch)) {
+    throw new Error("Remote Checkpoint Sync requires safe remote and branch names.");
+  }
+  if (
+    policy.runBranch === policy.integrationBranch ||
+    policy.runBranch === policy.stableBranch
+  ) {
+    throw new Error("Remote Checkpoint Sync cannot target a protected branch.");
+  }
+  if (!policy.runBranch.startsWith("run/standard/") || policy.currentBranch !== policy.runBranch) {
+    throw new Error("Remote Checkpoint Sync can target only the current STANDARD Run Branch.");
+  }
+}
+
+/** @param {Record<string, any>} context @param {string} localHead @param {string} stage */
+async function synchronizeRunHead(context, localHead, stage) {
+  if (!context.remoteSync.enabled) {
+    return {};
+  }
+  const policy = {
+    action: "push",
+    force: false,
+    remote: context.remoteSync.remote,
+    runBranch: context.branch,
+    currentBranch: await git(context.worktree, ["branch", "--show-current"]),
+    integrationBranch: context.repository.integrationBranch,
+    stableBranch: context.repository.stableBranch,
+  };
+  assertRemoteSyncPolicy(policy);
+  const remoteTrackingRef = `refs/remotes/${policy.remote}/${policy.runBranch}`;
+  await git(context.worktree, ["fetch", policy.remote, "--prune"]);
+  const remoteHead = await tryGit(context.worktree, ["rev-parse", "--verify", remoteTrackingRef]);
+  if (remoteHead) {
+    const fastForward = await tryGit(context.worktree, ["merge-base", "--is-ancestor", remoteHead, localHead]);
+    if (fastForward === null) {
+      return remoteSyncHumanGate(context, localHead, remoteHead, "REMOTE_DIVERGENCE");
+    }
+  }
+  const refspec = `refs/heads/${policy.runBranch}:refs/heads/${policy.runBranch}`;
+  const pushed = await runProcess(
+    "git",
+    ["push", "--porcelain", policy.remote, refspec],
+    context.worktree,
+    commandEnvironment(),
+  );
+  if (pushed.exitCode !== 0) {
+    await git(context.worktree, ["fetch", policy.remote, "--prune"]);
+    const observedRemoteHead = await tryGit(
+      context.worktree,
+      ["rev-parse", "--verify", remoteTrackingRef],
+    );
+    return remoteSyncHumanGate(
+      context,
+      localHead,
+      observedRemoteHead,
+      observedRemoteHead ? "REMOTE_DIVERGENCE" : "REMOTE_SYNC_REJECTED",
+    );
+  }
+  const synchronizedRemoteHead = await remoteBranchHead(
+    context.worktree,
+    policy.remote,
+    policy.runBranch,
+  );
+  if (synchronizedRemoteHead !== localHead) {
+    return remoteSyncHumanGate(
+      context,
+      localHead,
+      synchronizedRemoteHead,
+      "REMOTE_HEAD_MISMATCH",
+    );
+  }
+  const evidence = { stage, status: "PASS", localHead, remoteHead: synchronizedRemoteHead };
+  if (stage === "CHECKPOINT") {
+    for (const checkpoint of context.checkpointCommits) {
+      if (
+        !context.remoteSync.checkpoints.some(
+          (/** @type {any} */ entry) => entry.localHead === checkpoint,
+        )
+      ) {
+        context.remoteSync.checkpoints.push({
+          stage: "CHECKPOINT",
+          status: "PASS",
+          localHead: checkpoint,
+          remoteHead: checkpoint,
+          ...(checkpoint === localHead ? {} : { recovered: true }),
+        });
+      }
+    }
+  } else {
+    context.remoteSync.readyForHuman = evidence;
+  }
+  context.remoteSync.status = "PASS";
+  delete context.remoteSync.blocker;
+  context.artifacts["remote-sync.json"] = context.remoteSync;
+  await writeJson(path.join(context.artifactRoot, "remote-sync.json"), context.remoteSync);
+  return { evidence };
+}
+
+/** @param {Record<string, any>} context @param {string} localHead @param {string | null} remoteHead @param {string} reason */
+async function remoteSyncHumanGate(context, localHead, remoteHead, reason) {
+  context.remoteSync.status = "HUMAN_GATE";
+  context.remoteSync.blocker = {
+    reason,
+    remote: context.remoteSync.remote,
+    branch: context.branch,
+    localHead,
+    remoteHead,
+  };
+  context.artifacts["remote-sync.json"] = context.remoteSync;
+  return { humanGate: await humanGateForRemoteSync(context) };
+}
+
+/** @param {string} worktree @param {string} remote @param {string} branch */
+async function remoteBranchHead(worktree, remote, branch) {
+  const output = await git(worktree, ["ls-remote", "--heads", remote, `refs/heads/${branch}`]);
+  return output === "" ? null : output.split(/\s/u)[0];
 }
 
 /** @param {Record<string, any>} ticket */
@@ -2614,6 +3121,11 @@ function isSafeBranchName(value) {
   return isNonEmptyString(value) && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(value) && !value.includes("..");
 }
 
+/** @param {unknown} value */
+function isSafeRemoteName(value) {
+  return isNonEmptyString(value) && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value);
+}
+
 /** @param {unknown} value @returns {value is string} */
 function isSafeLeasedPath(value) {
   if (!isNonEmptyString(value)) {
@@ -2650,6 +3162,18 @@ async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
 }
 
+/** @param {string} file */
+async function tryReadJson(file) {
+  try {
+    return await readJson(file);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function main(args = process.argv.slice(2)) {
   let requestPath;
   let smoke = false;
@@ -2670,7 +3194,7 @@ export async function main(args = process.argv.slice(2)) {
   const target = path.resolve(runtimeDirectory, "..", "..");
   const report = await runEngineeringRun(target, requestPath ? { requestPath } : undefined);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  return report.status === "BLOCKED" ? 1 : 0;
+  return report.status === "BLOCKED" || report.status === "HUMAN_GATE" ? 1 : 0;
 }
 
 const isDirectExecution =

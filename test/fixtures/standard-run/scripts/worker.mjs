@@ -34,7 +34,12 @@ const slice = slices[/** @type {keyof typeof slices} */ (packet.ticketId)];
 assert.ok(slice, `Unexpected ticket ${packet.ticketId}`);
 assert.deepEqual(packet.writeLease, slice.lease);
 assert.deepEqual(packet.contextPaths, slice.context);
-if (process.argv[2] === "restart" && packet.ticketId === "TICKET-2" && packet.attempt === 1) {
+if (
+  process.argv[2] === "restart" &&
+  packet.ticketId === "TICKET-2" &&
+  packet.attempt === 1 &&
+  packet.resumedFromRemote !== true
+) {
   process.kill(process.ppid, "SIGTERM");
   process.exit(75);
 }

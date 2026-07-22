@@ -100,9 +100,33 @@ complete, independent Spec and Quality reviews run in fresh read-only processes,
 every selected instrumental check completes, and any lease drift since targeted
 verification blocks readiness.
 
+Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
+
+```json
+{
+  "settings": {
+    "remoteCheckpointSync": {
+      "enabled": true,
+      "remote": "origin"
+    }
+  }
+}
+```
+
+When enabled, Root fetches remote state before each publication and pushes only
+the exact current `run/standard/*` refspec. It never pushes `develop` or `main`,
+never force-pushes, and never merges. Remote divergence or a rejected update
+returns a non-terminal `HUMAN_GATE`, records the local and remote heads in
+`remote-sync.json`, and leaves both histories intact. On another machine, the
+same request fetches a matching non-terminal remote Run Branch, validates its
+request hash, base commit, Run State Store, and ticket graph, recreates the Run
+worktree, and resumes the deterministic frontier without chat history.
+
 Successful STANDARD work receives one Root-owned checkpoint per ticket and a terminal evidence
 commit on `run/standard/*`, leaves `develop` and `main` untouched, and stops at
-`READY_FOR_HUMAN` without automatic merge.
+`READY_FOR_HUMAN` without automatic merge. Opt-in sync records compact
+checkpoint evidence and does not change `accepted: false` or transition the run
+to `ACCEPTED`.
 
 The runtime requires a clean prepared Git repository, creates an isolated
 `run/fast/*` branch and sibling worktree, and executes registered commands with
@@ -142,9 +166,10 @@ replace validated evidence.
 Successful work receives a Root-owned checkpoint commit and a terminal
 evidence commit on the Run Branch. Compact structured artifacts are stored in
 `.engineering/runs/<run-id>/`, and the command returns `READY_FOR_HUMAN` with
-the aggregate diff. It never changes `develop` or `main`, reaches `ACCEPTED`,
-pushes, or merges. Failed instrumental verification returns `BLOCKED` and keeps
-the release state unreachable.
+the aggregate diff. It never changes `develop` or `main`, reaches `ACCEPTED`, or
+merges. It pushes only the current Run Branch when Remote Checkpoint Sync was
+explicitly enabled. Failed instrumental verification returns `BLOCKED` and
+keeps the release state unreachable.
 
 ## Legacy normalization proposal
 

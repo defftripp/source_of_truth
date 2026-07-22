@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in, fast-forward-only Remote Checkpoint Sync for the current Run Branch with durable evidence.
+- Stop remote divergence at a non-terminal Human Gate and resume matching durable STANDARD runs from a fresh clone.
 - Execute multi-ticket STANDARD graphs blockers-first with a deterministic frontier and one fresh Root checkpoint per vertical ticket.
 - Persist ticket-specific Context Packets, exclusive Write Leases, graph progress, attempts, and checkpoint evidence so interrupted runs resume without chat history.
 - Execute a one-ticket STANDARD lifecycle through repository research, spec-lite, complete Planner coverage, and a strict Advisor Gate.

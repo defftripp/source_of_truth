@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  assertRemoteSyncPolicy,
   checkpointCommitsInExecutionOrder,
   selectDeterministicFrontier,
 } from "../../skills/engineering-loop/runtime/engine.mjs";
@@ -37,6 +38,245 @@ test("STANDARD frontier and checkpoint order are locale-independent and graph-or
     }),
     ["commit-b", "commit-z", "commit-a"],
   );
+});
+
+test("Remote Checkpoint Sync policy rejects protected branches, merge, and force", () => {
+  const safe = {
+    action: "push",
+    force: false,
+    remote: "origin",
+    runBranch: "run/standard/example",
+    currentBranch: "run/standard/example",
+    integrationBranch: "develop",
+    stableBranch: "main",
+  };
+  assert.doesNotThrow(() => assertRemoteSyncPolicy(safe));
+  assert.throws(
+    () => assertRemoteSyncPolicy({ ...safe, action: "merge" }),
+    /push action/u,
+  );
+  assert.throws(
+    () => assertRemoteSyncPolicy({ ...safe, force: true }),
+    /force/u,
+  );
+  assert.throws(
+    () => assertRemoteSyncPolicy({ ...safe, runBranch: "develop" }),
+    /protected branch/u,
+  );
+  assert.throws(
+    () => assertRemoteSyncPolicy({ ...safe, currentBranch: "run/standard/other" }),
+    /current STANDARD Run Branch/u,
+  );
+});
+
+test("Remote Checkpoint Sync is opt-in and publishes only the current Run Branch", async () => {
+  const disabled = await prepareTarget("sync-default-off");
+  try {
+    const remote = await attachBareRemote(disabled);
+    const refsBefore = await remoteRefs(remote);
+    const result = await invokeRun(disabled.target, "graph-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.deepEqual(await remoteRefs(remote), refsBefore);
+  } finally {
+    await rm(disabled.sandbox, { recursive: true, force: true });
+  }
+
+  const enabled = await prepareTarget("sync-enabled");
+  try {
+    const remote = await attachBareRemote(enabled);
+    const refsBefore = await remoteRefs(remote);
+    const result = await invokeRun(enabled.target, "sync-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, "");
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.accepted, false);
+    assert.equal(report.remoteSync.enabled, true);
+    assert.equal(report.remoteSync.status, "PASS");
+    assert.equal(report.remoteSync.remote, "origin");
+    assert.equal(report.remoteSync.branch, report.run.branch);
+
+    const refsAfter = await remoteRefs(remote);
+    const changedRefs = Object.keys(refsAfter).filter((name) => refsAfter[name] !== refsBefore[name]);
+    assert.deepEqual(changedRefs, [`refs/heads/${report.run.branch}`]);
+    assert.equal(refsAfter[`refs/heads/${report.run.branch}`], report.run.head);
+    assert.equal(refsAfter["refs/heads/develop"], refsBefore["refs/heads/develop"]);
+    assert.equal(refsAfter["refs/heads/main"], refsBefore["refs/heads/main"]);
+
+    const syncArtifact = await gitShowJson(
+      enabled.target,
+      report.run.head,
+      `${report.run.artifactPath}/remote-sync.json`,
+    );
+    assert.equal(syncArtifact.status, "PASS");
+    assert.equal(syncArtifact.remote, "origin");
+    assert.equal(syncArtifact.branch, report.run.branch);
+    assert.ok(syncArtifact.checkpoints.length >= 1);
+    assert.ok(syncArtifact.checkpoints.every((/** @type {any} */ entry) => entry.status === "PASS"));
+  } finally {
+    await rm(enabled.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("remote divergence stops at a Human Gate without overwriting either history", async () => {
+  const prepared = await prepareTarget("sync-divergence");
+  try {
+    const remote = await attachBareRemote(prepared);
+    const interrupted = await invokeRun(prepared.target, "sync-restart-request.json");
+    assert.notEqual(interrupted.code, 0);
+    const runBranch = (await remoteRunBranches(remote))[0];
+    assert.ok(runBranch);
+    const runId = runBranch.split("/").at(-1);
+    assert.ok(runId);
+    const worktree = `${prepared.target}.engineering-worktrees/${runId}`;
+    const localCheckpoint = await git(worktree, "rev-parse", "HEAD");
+
+    const adversary = path.join(prepared.sandbox, "adversary");
+    await git(prepared.sandbox, "clone", remote, adversary);
+    await git(adversary, "config", "user.name", "Remote Writer");
+    await git(adversary, "config", "user.email", "remote-writer@example.invalid");
+    await git(adversary, "switch", runBranch);
+    await writeFile(path.join(adversary, "remote-owner.txt"), "remote history\n", "utf8");
+    await git(adversary, "add", "remote-owner.txt");
+    await git(adversary, "commit", "-m", "test: add independent remote history");
+    await git(adversary, "push", "origin", runBranch);
+    const remoteDivergedHead = (await remoteRefs(remote))[`refs/heads/${runBranch}`];
+
+    const resumed = await invokeRun(prepared.target, "sync-restart-request.json");
+    assert.equal(resumed.code, 1, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.status, "HUMAN_GATE");
+    assert.equal(report.terminal, false);
+    assert.equal(report.accepted, false);
+    assert.equal(report.blocker.reason, "REMOTE_DIVERGENCE");
+    assert.equal(report.blocker.remoteHead, remoteDivergedHead);
+    assert.notEqual(report.blocker.localHead, remoteDivergedHead);
+    assert.equal((await remoteRefs(remote))[`refs/heads/${runBranch}`], remoteDivergedHead);
+    assert.equal(await git(worktree, "merge-base", "--is-ancestor", localCheckpoint, report.run.head), "");
+    assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
+    assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a fresh clone resumes the same remote STANDARD frontier without chat history", async () => {
+  const prepared = await prepareTarget("sync-two-clone");
+  try {
+    const remote = await attachBareRemote(prepared);
+    const interrupted = await invokeRun(prepared.target, "sync-restart-request.json");
+    assert.notEqual(interrupted.code, 0);
+    const runBranch = (await remoteRunBranches(remote))[0];
+    assert.ok(runBranch);
+    const runId = runBranch.split("/").at(-1);
+    assert.ok(runId);
+
+    const secondTarget = path.join(prepared.sandbox, "second-machine");
+    await git(prepared.sandbox, "-c", "core.autocrlf=false", "clone", remote, secondTarget);
+    await git(secondTarget, "config", "core.autocrlf", "false");
+    await git(secondTarget, "branch", "main", "origin/main");
+    await git(secondTarget, "config", "user.name", "Second Machine");
+    await git(secondTarget, "config", "user.email", "second-machine@example.invalid");
+    const resumed = await invokeRun(secondTarget, "sync-restart-request.json");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    assert.equal(resumed.stderr, "");
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.accepted, false);
+    assert.equal(report.run.id, runId);
+    assert.equal(report.run.branch, runBranch);
+    assert.equal(report.remoteSync.status, "PASS");
+    assert.ok(report.stateHistory.some((/** @type {any} */ entry) => entry.state === "RESUMED"));
+    assert.deepEqual(report.executionOrder, ["TICKET-1", "TICKET-2", "TICKET-3"]);
+    assert.equal((await remoteRefs(remote))[`refs/heads/${runBranch}`], report.run.head);
+    const graph = await gitShowJson(
+      secondTarget,
+      report.run.head,
+      `${report.run.artifactPath}/ticket-graph.json`,
+    );
+    assert.equal(graph.tickets.find((/** @type {any} */ ticket) => ticket.id === "TICKET-2").attempts, 1);
+    assert.equal("chat" in graph, false);
+    const syncArtifact = await gitShowJson(
+      secondTarget,
+      report.run.head,
+      `${report.run.artifactPath}/remote-sync.json`,
+    );
+    assert.deepEqual(
+      syncArtifact.checkpoints.map((/** @type {any} */ entry) => entry.localHead),
+      report.run.checkpointCommits,
+    );
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("resume records PASS only after a previously rejected checkpoint reaches remote", async () => {
+  const prepared = await prepareTarget("sync-rejected-retry");
+  try {
+    const remote = await attachBareRemote(prepared);
+    const rejectingHook = path.join(remote, "hooks", "pre-receive");
+    await writeFile(rejectingHook, "#!/bin/sh\nexit 1\n", "utf8");
+
+    const rejected = await invokeRun(prepared.target, "sync-request.json");
+    assert.equal(rejected.code, 1, `${rejected.stdout}\n${rejected.stderr}`);
+    const gate = JSON.parse(rejected.stdout);
+    assert.equal(gate.status, "HUMAN_GATE");
+    assert.equal(gate.blocker.reason, "REMOTE_SYNC_REJECTED");
+    assert.deepEqual(gate.remoteSync.checkpoints, []);
+    assert.deepEqual(await remoteRunBranches(remote), []);
+
+    await rm(rejectingHook, { force: true });
+    const resumed = await invokeRun(prepared.target, "sync-request.json");
+    assert.equal(resumed.code, 0, `${resumed.stdout}\n${resumed.stderr}`);
+    const report = JSON.parse(resumed.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    const artifact = await gitShowJson(
+      prepared.target,
+      report.run.head,
+      `${report.run.artifactPath}/remote-sync.json`,
+    );
+    assert.deepEqual(
+      artifact.checkpoints.map((/** @type {any} */ entry) => entry.localHead),
+      report.run.checkpointCommits,
+    );
+    assert.ok(artifact.checkpoints.every((/** @type {any} */ entry) => entry.remoteHead === entry.localHead));
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
+test("remote resume rejects an unexpected Run Artifact before checkout", async () => {
+  const prepared = await prepareTarget("sync-unsafe-remote-artifact");
+  try {
+    const remote = await attachBareRemote(prepared);
+    const interrupted = await invokeRun(prepared.target, "sync-restart-request.json");
+    assert.notEqual(interrupted.code, 0);
+    const runBranch = (await remoteRunBranches(remote))[0];
+    assert.ok(runBranch);
+    const runId = runBranch.split("/").at(-1);
+    assert.ok(runId);
+
+    const adversary = path.join(prepared.sandbox, "artifact-adversary");
+    await git(prepared.sandbox, "clone", remote, adversary);
+    await git(adversary, "config", "user.name", "Artifact Writer");
+    await git(adversary, "config", "user.email", "artifact-writer@example.invalid");
+    await git(adversary, "switch", runBranch);
+    const unexpected = path.join(adversary, ".engineering", "runs", runId, "unexpected.json");
+    await writeFile(unexpected, "{}\n", "utf8");
+    await git(adversary, "add", ".");
+    await git(adversary, "commit", "-m", "test: forge unexpected Run Artifact");
+    await git(adversary, "push", "origin", runBranch);
+
+    const secondTarget = path.join(prepared.sandbox, "unsafe-second-machine");
+    await git(prepared.sandbox, "-c", "core.autocrlf=false", "clone", remote, secondTarget);
+    await git(secondTarget, "config", "core.autocrlf", "false");
+    await git(secondTarget, "branch", "main", "origin/main");
+    const resumed = await invokeRun(secondTarget, "sync-restart-request.json");
+    assert.equal(resumed.code, 1);
+    assert.match(resumed.stderr, /Run Artifact set is not allowlisted/u);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
 });
 
 test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecycle", async () => {
@@ -342,6 +582,7 @@ async function prepareTarget(label, prepareFixture) {
   await cp(fixturePath, target, { recursive: true });
   await prepareFixture?.(target);
   await git(target, "init", "--initial-branch=develop");
+  await git(target, "config", "core.autocrlf", "false");
   await git(target, "config", "user.name", "Engineering Loop Test");
   await git(target, "config", "user.email", "engineering-loop@example.invalid");
   await git(target, "add", ".");
@@ -359,6 +600,30 @@ async function prepareTarget(label, prepareFixture) {
     developBefore: await git(target, "rev-parse", "develop"),
     mainBefore: await git(target, "rev-parse", "main"),
   };
+}
+
+/** @param {{ sandbox: string, target: string }} prepared */
+async function attachBareRemote(prepared) {
+  const remote = path.join(prepared.sandbox, "remote.git");
+  await git(prepared.sandbox, "init", "--bare", remote);
+  await git(prepared.target, "remote", "add", "origin", remote);
+  await git(prepared.target, "push", "origin", "develop", "main");
+  await git(remote, "symbolic-ref", "HEAD", "refs/heads/develop");
+  return remote;
+}
+
+/** @param {string} remote */
+async function remoteRefs(remote) {
+  const output = await git(remote, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads");
+  return Object.fromEntries(
+    output.split(/\r?\n/u).filter(Boolean).map((/** @type {string} */ line) => line.split(" ")),
+  );
+}
+
+/** @param {string} remote */
+async function remoteRunBranches(remote) {
+  const output = await git(remote, "for-each-ref", "--format=%(refname:short)", "refs/heads/run/standard");
+  return output.split(/\r?\n/u).filter(Boolean);
 }
 
 /** @param {string} target @param {string} requestPath */
