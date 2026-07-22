@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Reject changed payment migration scope",
+    "scope": "LOCAL",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY",
+    "hardToReverseProfile": "PAYMENTS"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/payment.mjs"],
+  "deep": {
+    "acceptanceCriteria": [{
+      "id": "AC-1",
+      "statement": "The payment module exposes the migrated status.",
+      "verificationIds": ["payment-test", "observed-behavior"]
+    }],
+    "testingSeams": [{
+      "id": "SEAM-1",
+      "interface": "The public payment module export.",
+      "verificationIds": ["payment-test"]
+    }],
+    "contextPaths": ["src/payment.mjs", "test/payment.test.mjs"],
+    "requiredEvidenceIds": ["fact-payment-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "changed-scope-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "payment-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

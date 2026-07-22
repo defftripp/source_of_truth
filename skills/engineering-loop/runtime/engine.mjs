@@ -12,6 +12,11 @@ import {
   verifyFileChecksums,
 } from "./contracts.mjs";
 import { classifyTaskProfile } from "./mode-policy.mjs";
+import {
+  deepAdvisorEvidence,
+  validateDeepPlanContract,
+  validateDeepResearchContract,
+} from "./deep-contracts.mjs";
 
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
@@ -20,10 +25,16 @@ const INSTRUMENTAL_ROLES = Object.freeze(["test", "typecheck", "build", "observe
 const RUN_ARTIFACT_FILES = new Set([
   "advisor.json",
   "context-packet.json",
+  "domain-decisions.json",
+  "domain-model.json",
   "human-gate.json",
+  "manifest-approval.json",
+  "migration-contract.json",
+  "migration-manifest.json",
   "quality-review.json",
   "remote-sync.json",
   "research.json",
+  "rollback-plan.json",
   "result.json",
   "spec-lite.json",
   "spec-review.json",
@@ -72,6 +83,13 @@ export async function runEngineeringRun(targetInput, options = {}) {
     request.classification.selectedMode === "STANDARD" &&
     "standard" in request &&
     request.standard
+  ) {
+    return runStandardTask(target, prepared, request);
+  }
+  if (
+    request.classification.selectedMode === "DEEP" &&
+    "deep" in request &&
+    request.deep
   ) {
     return runStandardTask(target, prepared, request);
   }
@@ -190,9 +208,11 @@ function validateRunRequest(value) {
   if (!request.commands || typeof request.commands !== "object") {
     throw new Error("Run request must reference registered commands.");
   }
-  const standardExecution = classification.selectedMode === "STANDARD" && request.standard;
+  const plannedExecution =
+    (classification.selectedMode === "STANDARD" && request.standard) ||
+    (classification.selectedMode === "DEEP" && request.deep);
   const commandFields =
-    standardExecution
+    plannedExecution
       ? [
           "research",
           "planner",
@@ -216,8 +236,18 @@ function validateRunRequest(value) {
   ) {
     throw new Error("commands.relevantChecks must contain unique registered command IDs.");
   }
-  if (standardExecution) {
+  if (classification.selectedMode === "STANDARD" && request.standard) {
     validateStandardRequest(request);
+  }
+  if (classification.selectedMode === "DEEP" && request.deep) {
+    validateStandardRequest({ ...request, humanAnswers: undefined, standard: request.deep });
+    if (
+      !Array.isArray(request.deep.requiredEvidenceIds) ||
+      request.deep.requiredEvidenceIds.length === 0
+    ) {
+      throw new Error("DEEP request requires high-risk evidence before planning.");
+    }
+    validateDeepManifestAnswer(request.humanAnswers);
   }
   return { ...request, classification };
 }
@@ -657,6 +687,9 @@ async function runFastTask(target, prepared, request) {
 
 /** @param {string} target @param {{ registry: any, report: any }} prepared @param {Record<string, any>} request */
 async function runStandardTask(target, prepared, request) {
+  const mode = request.classification.selectedMode;
+  const plannedRequest = mode === "DEEP" ? request.deep : request.standard;
+  const branchMode = mode.toLowerCase();
   const repository = await inspectRepository(
     target,
     request.repository.integrationBranch,
@@ -670,9 +703,10 @@ async function runStandardTask(target, prepared, request) {
     worktreeRoot,
     requestHash,
     repository.integrationHead,
+    mode,
   );
   let restoredFromRemote = false;
-  if (!resumable && request.settings?.remoteCheckpointSync?.enabled === true) {
+  if (mode === "STANDARD" && !resumable && request.settings?.remoteCheckpointSync?.enabled === true) {
     restoredFromRemote = await restoreRemoteStandardRun(
       target,
       worktreeRoot,
@@ -686,6 +720,7 @@ async function runStandardTask(target, prepared, request) {
         worktreeRoot,
         requestHash,
         repository.integrationHead,
+        mode,
       );
       if (!resumable) {
         throw new Error("Fetched STANDARD Run Branch could not be restored from durable state.");
@@ -693,7 +728,7 @@ async function runStandardTask(target, prepared, request) {
     }
   }
   const runId = resumable?.runId ?? createRunId();
-  const branch = resumable?.branch ?? `run/standard/${runId}`;
+  const branch = resumable?.branch ?? `run/${branchMode}/${runId}`;
   const worktree = path.join(worktreeRoot, runId);
   const artifactPath = `.engineering/runs/${runId}`;
   const artifactRoot = path.join(worktree, ...artifactPath.split("/"));
@@ -704,9 +739,12 @@ async function runStandardTask(target, prepared, request) {
   const artifacts = /** @type {Record<string, any>} */ (resumable?.artifacts ?? {});
   const checkpointCommits = resumable?.graph ? checkpointCommitsInExecutionOrder(resumable.graph) : [];
   const resumeDecisionGate = resumable?.phase === "DECISION_GATE";
+  const resumeManifestGate = resumable?.phase === "MANIFEST_GATE";
+  const resumeApprovalCheckpoint = resumable?.phase === "APPROVAL_CHECKPOINT";
   let research;
   let specLite;
   let planned;
+  let deepPlan;
   /** @type {Record<string, any>} */
   let ticketGraph;
   let advisor;
@@ -726,7 +764,7 @@ async function runStandardTask(target, prepared, request) {
     writeLease: request.writeLease,
     commandGuard,
     artifacts,
-    mode: "STANDARD",
+    mode,
     workerCount: resumable?.graph?.tickets.reduce(
       (/** @type {number} */ total, /** @type {any} */ ticket) => total + ticket.attempts,
       0,
@@ -734,7 +772,9 @@ async function runStandardTask(target, prepared, request) {
     checkpointCommits,
     blocker: blockStandardRun,
     requestHash,
-    remoteSync: resumeRemoteSyncState(request, branch, resumable, checkpointCommits),
+    remoteSync: mode === "STANDARD"
+      ? resumeRemoteSyncState(request, branch, resumable, checkpointCommits)
+      : { schemaVersion: 1, enabled: false, branch },
   });
   if (restoredFromRemote && context.remoteSync.enabled) {
     context.remoteSync.status = "PASS";
@@ -747,15 +787,17 @@ async function runStandardTask(target, prepared, request) {
   }
 
   try {
-    if (resumeDecisionGate) {
+    if (resumeDecisionGate || resumeManifestGate) {
       await git(worktree, ["reset", "--hard", "HEAD"]);
       await git(worktree, ["clean", "-fd"]);
       await initializeCommandGuard(commandGuard, worktree, repository, branch);
       await mkdir(artifactRoot, { recursive: true });
       transitionState(stateHistory, "RESUMED");
-      research = artifacts["research.json"];
-      const answeredGate = await recordStandardDecision(context, request, artifacts["human-gate.json"]);
-      artifacts["human-gate.json"] = answeredGate;
+      if (resumeDecisionGate) {
+        research = artifacts["research.json"];
+        const answeredGate = await recordStandardDecision(context, request, artifacts["human-gate.json"]);
+        artifacts["human-gate.json"] = answeredGate;
+      }
     }
     if (!resumable) {
     transitionState(stateHistory, "CLASSIFIED");
@@ -771,7 +813,7 @@ async function runStandardTask(target, prepared, request) {
       repository.integrationHead,
       stateHistory,
       false,
-      "STANDARD",
+      mode,
     );
 
     transitionState(stateHistory, "REPOSITORY_RESEARCH");
@@ -790,12 +832,39 @@ async function runStandardTask(target, prepared, request) {
     artifacts["research.json"] = research;
     await writeJson(path.join(artifactRoot, "research.json"), research);
 
-    if (request.standard.decision) {
-      if (researchAnswersDecision(research, request.standard.decision)) {
+    if (mode === "DEEP") {
+      transitionState(stateHistory, "DOMAIN_MODELING");
+      const deepResearch = validateDeepResearchContract(research, plannedRequest);
+      if (!deepResearch.valid) {
+        return blockStandardSchema(context, "DOMAIN_MODELING", "high-risk-evidence");
+      }
+      artifacts["domain-model.json"] = {
+        schemaVersion: 1,
+        boundaries: research.domainModel.boundaries,
+      };
+      await writeJson(path.join(artifactRoot, "domain-model.json"), artifacts["domain-model.json"]);
+      transitionState(stateHistory, "DECISION_RECORDING");
+      const deepDecisionPaths = await recordDeepDomainDecisions(
+        worktree,
+        research.domainModel.decisions,
+      );
+      artifacts["domain-decisions.json"] = {
+        schemaVersion: 1,
+        decisions: research.domainModel.decisions,
+        contextPaths: deepDecisionPaths,
+      };
+      await writeJson(
+        path.join(artifactRoot, "domain-decisions.json"),
+        artifacts["domain-decisions.json"],
+      );
+    }
+
+    if (mode === "STANDARD" && plannedRequest.decision) {
+      if (researchAnswersDecision(research, plannedRequest.decision)) {
         return blockStandardSchema(context, "DECISION_GATE", "question-audit");
       }
       const humanGate = createDecisionHumanGate(
-        request.standard.decision,
+        plannedRequest.decision,
         requestHash,
         research.facts.map((/** @type {any} */ fact) => fact.id),
       );
@@ -805,13 +874,13 @@ async function runStandardTask(target, prepared, request) {
     }
 
     if (!resumable || resumeDecisionGate) {
-    transitionState(stateHistory, "SPEC_LITE");
+    transitionState(stateHistory, mode === "DEEP" ? "SPECIFICATION" : "SPEC_LITE");
     specLite = {
       schemaVersion: 1,
       taskSummary: request.task.summary,
       evidenceBackedFacts: research.facts.map((/** @type {any} */ fact) => fact.id),
-      acceptanceCriteria: request.standard.acceptanceCriteria,
-      testingSeams: request.standard.testingSeams,
+      acceptanceCriteria: plannedRequest.acceptanceCriteria,
+      testingSeams: plannedRequest.testingSeams,
     };
     artifacts["spec-lite.json"] = specLite;
     await writeJson(path.join(artifactRoot, "spec-lite.json"), specLite);
@@ -825,7 +894,11 @@ async function runStandardTask(target, prepared, request) {
       return blockStandardAfterCommand(context, "TICKET_PLANNING", commands.planner, plannerExecution.result);
     }
     try {
-      planned = parseExecutionPlan(plannerExecution.result.stdout, request, commands);
+      planned = parseExecutionPlan(
+        plannerExecution.result.stdout,
+        mode === "DEEP" ? { ...request, standard: plannedRequest } : request,
+        commands,
+      );
     } catch {
       return blockStandardSchema(context, "TICKET_PLANNING", "acceptance-coverage");
     }
@@ -849,8 +922,67 @@ async function runStandardTask(target, prepared, request) {
     artifacts["ticket-graph.json"] = ticketGraph;
     await writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph);
 
+    if (mode === "DEEP") {
+      try {
+        deepPlan = parseJsonOutput(plannerExecution.result.stdout, "DEEP Planner");
+      } catch {
+        return blockStandardSchema(context, "TICKET_PLANNING", "deep-plan-contract");
+      }
+      transitionState(stateHistory, "MIGRATION_CONTRACT");
+      transitionState(stateHistory, "ROLLBACK_PLAN");
+      transitionState(stateHistory, "MANIFEST_APPROVAL");
+      const proposedApproval = {
+        schemaVersion: 1,
+        manifestHash: deepPlan.migrationManifest?.hash,
+        approved: true,
+      };
+      const deepPlanResult = validateDeepPlanContract(
+        deepPlan,
+        proposedApproval,
+        {
+          writeLease: request.writeLease,
+          domainBoundaryIds: research.domainModel.boundaries.map(
+            (/** @type {any} */ boundary) => boundary.id,
+          ),
+        },
+      );
+      if (!deepPlanResult.valid) {
+        artifacts["advisor.json"] = {
+          schemaVersion: 1,
+          status: "REVISE",
+          ticketIds: planned.tickets.map((ticket) => ticket.id),
+          evidence: [],
+          concerns: deepPlanResult.errors,
+        };
+        return blockStandardSchema(context, "MANIFEST_APPROVAL", "manifest-approval");
+      }
+      artifacts["migration-contract.json"] = deepPlan.migrationContract;
+      artifacts["rollback-plan.json"] = deepPlan.rollbackPlan;
+      artifacts["migration-manifest.json"] = deepPlan.migrationManifest;
+      await Promise.all([
+        writeJson(path.join(artifactRoot, "migration-contract.json"), deepPlan.migrationContract),
+        writeJson(path.join(artifactRoot, "rollback-plan.json"), deepPlan.rollbackPlan),
+        writeJson(path.join(artifactRoot, "migration-manifest.json"), deepPlan.migrationManifest),
+      ]);
+      const manifestGate = createMigrationManifestHumanGate(
+        requestHash,
+        plannedRequest.requiredEvidenceIds,
+        deepPlan.migrationManifest,
+      );
+      artifacts["human-gate.json"] = manifestGate;
+      return persistStandardHumanGate(context, manifestGate, { migrationManifest: deepPlan.migrationManifest }, true);
+    }
+
     transitionState(stateHistory, "ADVISOR_GATE");
-    const expectedAdvisorEvidence = advisorEvidence(planned);
+    const expectedAdvisorEvidence = [
+      ...advisorEvidence(planned),
+      ...(mode === "DEEP"
+        ? deepAdvisorEvidence(
+            /** @type {Record<string, any>} */ (/** @type {unknown} */ (deepPlan)),
+            artifacts["manifest-approval.json"].manifestHash,
+          )
+        : []),
+    ].sort();
     const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
       ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
       ENGINEERING_ADVISOR_TICKETS: JSON.stringify(planned.tickets.map((ticket) => ticket.id)),
@@ -876,7 +1008,9 @@ async function runStandardTask(target, prepared, request) {
       await git(worktree, ["reset", "--hard", "HEAD"]);
       await git(worktree, ["clean", "-fd"]);
       await initializeCommandGuard(commandGuard, worktree, repository, branch);
-      transitionState(stateHistory, "RESUMED");
+      if (!resumeManifestGate) {
+        transitionState(stateHistory, "RESUMED");
+      }
       ticketGraph = resumable.graph;
       for (const ticket of ticketGraph.tickets) {
         if (ticket.status === "IN_PROGRESS") {
@@ -889,15 +1023,83 @@ async function runStandardTask(target, prepared, request) {
           schemaVersion: 1,
           tickets: ticketGraph.tickets.map(ticketContract),
         }),
-        request,
+        mode === "DEEP" ? { ...request, standard: plannedRequest } : request,
         commands,
       );
+      if (mode === "DEEP") {
+        deepPlan = {
+          schemaVersion: 1,
+          domainBoundaryIds: artifacts["domain-model.json"].boundaries.map(
+            (/** @type {any} */ boundary) => boundary.id,
+          ),
+          tickets: ticketGraph.tickets.map(ticketContract),
+          migrationContract: artifacts["migration-contract.json"],
+          rollbackPlan: artifacts["rollback-plan.json"],
+          migrationManifest: artifacts["migration-manifest.json"],
+        };
+        if (resumeManifestGate) {
+          artifacts["manifest-approval.json"] = await recordDeepManifestApproval(
+            context,
+            request,
+            artifacts["human-gate.json"],
+            deepPlan.migrationManifest,
+          );
+          ticketGraph.decisionCommit = context.decisionCommit;
+          artifacts["ticket-graph.json"] = ticketGraph;
+        }
+        const deepPlanResult = validateDeepPlanContract(
+          deepPlan,
+          artifacts["manifest-approval.json"],
+          {
+            writeLease: request.writeLease,
+            domainBoundaryIds: artifacts["domain-model.json"].boundaries.map(
+              (/** @type {any} */ boundary) => boundary.id,
+            ),
+          },
+        );
+        if (!deepPlanResult.valid) {
+          return blockStandardSchema(context, "RESUMED", "deep-plan-contract");
+        }
+      }
       validateDurableExecutionOrder(ticketGraph);
-      advisor = parseAdvisor(
-        JSON.stringify(artifacts["advisor.json"]),
-        planned.tickets.map((ticket) => ticket.id),
-        advisorEvidence(planned),
-      );
+      const expectedAdvisorEvidence = [
+        ...advisorEvidence(planned),
+        ...(mode === "DEEP"
+          ? deepAdvisorEvidence(
+              /** @type {Record<string, any>} */ (deepPlan),
+              artifacts["manifest-approval.json"].manifestHash,
+            )
+          : []),
+      ].sort();
+      if (resumeManifestGate || resumeApprovalCheckpoint) {
+        transitionState(stateHistory, "ADVISOR_GATE");
+        const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
+          ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
+          ENGINEERING_ADVISOR_TICKETS: JSON.stringify(planned.tickets.map((ticket) => ticket.id)),
+        });
+        if (advisorExecution.blocked) {
+          return advisorExecution.blocked;
+        }
+        if (advisorExecution.result.exitCode !== 0) {
+          return blockStandardAfterCommand(context, "ADVISOR_GATE", commands.advisor, advisorExecution.result);
+        }
+        try {
+          advisor = parseAdvisor(
+            advisorExecution.result.stdout,
+            planned.tickets.map((ticket) => ticket.id),
+            expectedAdvisorEvidence,
+          );
+        } catch {
+          return blockStandardSchema(context, "ADVISOR_GATE", "advisor-approval");
+        }
+        artifacts["advisor.json"] = advisor;
+      } else {
+        advisor = parseAdvisor(
+          JSON.stringify(artifacts["advisor.json"]),
+          planned.tickets.map((ticket) => ticket.id),
+          expectedAdvisorEvidence,
+        );
+      }
       artifacts["ticket-graph.json"] = ticketGraph;
       await mkdir(artifactRoot, { recursive: true });
       await Promise.all([
@@ -913,7 +1115,7 @@ async function runStandardTask(target, prepared, request) {
           repository.integrationHead,
           stateHistory,
           false,
-          "STANDARD",
+          mode,
         ),
       ]);
     }
@@ -985,12 +1187,15 @@ async function runStandardTask(target, prepared, request) {
           repository.integrationHead,
           stateHistory,
           false,
-          "STANDARD",
+          mode,
         ),
       ]);
 
       transitionState(stateHistory, "IMPLEMENTING");
       const ticketBase = await git(worktree, ["rev-parse", "HEAD"]);
+      const preWorkerChanges = new Map(
+        (await workingTreeFingerprint(worktree, ticketBase)).map((entry) => [entry.path, entry.hash]),
+      );
       const workerExecution = await executeRunCommand(context, commands.worker, undefined, {
         ENGINEERING_CONTEXT_PACKET: contextPacketPath,
         ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
@@ -1018,7 +1223,9 @@ async function runStandardTask(target, prepared, request) {
         return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
       }
       verification.checks.push({ ...workerVerification, ticketId: ticket.id, attempt: ticket.attempts });
-      const workerChanges = await changedPaths(worktree, ticketBase);
+      const workerChanges = (await workingTreeFingerprint(worktree, ticketBase))
+        .filter((entry) => preWorkerChanges.get(entry.path) !== entry.hash)
+        .map((entry) => entry.path);
       const workerScopeLeak = workerChanges.find(
         (changedPath) =>
           !ticket.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
@@ -1074,7 +1281,7 @@ async function runStandardTask(target, prepared, request) {
           repository.integrationHead,
           stateHistory,
           false,
-          "STANDARD",
+          mode,
         ),
         "task-profile.json": taskProfile,
         "ticket-graph.json": ticketGraph,
@@ -1095,7 +1302,7 @@ async function runStandardTask(target, prepared, request) {
         `core.hooksPath=${commandGuard.emptyHooks}`,
         "commit",
         "-m",
-        `feat: complete STANDARD ticket ${ticket.id} (${runId})`,
+        `feat: complete ${mode} ticket ${ticket.id} (${runId})`,
       ]);
       const checkpointCommit = await git(worktree, ["rev-parse", "HEAD"]);
       await validateCommittedTree(worktree, checkpointCommit, checkpointTree);
@@ -1115,7 +1322,7 @@ async function runStandardTask(target, prepared, request) {
           repository.integrationHead,
           stateHistory,
           false,
-          "STANDARD",
+          mode,
         ),
       ]);
       const checkpointSync = await synchronizeRunHead(context, checkpointCommit, "CHECKPOINT");
@@ -1125,7 +1332,7 @@ async function runStandardTask(target, prepared, request) {
     }
 
     transitionState(stateHistory, "SPEC_REVIEW");
-    const specRequirements = request.standard.acceptanceCriteria.map(
+    const specRequirements = plannedRequest.acceptanceCriteria.map(
       (/** @type {any} */ criterion) => criterion.id,
     );
     const specReviewPacket = await createReviewPacket(context, "SPEC_REVIEWER", specRequirements);
@@ -1209,7 +1416,10 @@ async function runStandardTask(target, prepared, request) {
     }
 
     const implementationChanges = await changedPaths(worktree, repository.integrationHead);
-    const decisionPaths = new Set(decisionControlledPaths(artifacts["human-gate.json"]));
+    const decisionPaths = new Set([
+      ...decisionControlledPaths(artifacts["human-gate.json"]),
+      ...deepDecisionControlledPaths(artifacts["domain-decisions.json"]),
+    ]);
     const unauthorizedPath = implementationChanges.find(
       (changedPath) =>
         !request.writeLease.includes(changedPath) &&
@@ -1220,7 +1430,7 @@ async function runStandardTask(target, prepared, request) {
       return blockStandardSchema(context, "ARTIFACT_VALIDATION", "write-lease");
     }
     if (!implementationChanges.some((changedPath) => request.writeLease.includes(changedPath))) {
-      throw new Error("STANDARD Worker produced no Application Core change.");
+      throw new Error(`${mode} Worker produced no Application Core change.`);
     }
 
     const checkpointArtifacts = {
@@ -1231,14 +1441,14 @@ async function runStandardTask(target, prepared, request) {
         repository.integrationHead,
         stateHistory,
         false,
-        "STANDARD",
+        mode,
       ),
       "task-profile.json": taskProfile,
       "verification.json": verification,
     };
     const checkpointCommit = context.checkpointCommits.at(-1);
     if (!checkpointCommit) {
-      throw new Error("STANDARD graph completed without a checkpoint commit.");
+      throw new Error(`${mode} graph completed without a checkpoint commit.`);
     }
 
     const readyStateHistory = [...stateHistory];
@@ -1249,7 +1459,7 @@ async function runStandardTask(target, prepared, request) {
       terminal: true,
       accepted: false,
       releaseStateReached: true,
-      mode: "STANDARD",
+      mode,
       branch,
       baseCommit: repository.integrationHead,
       checkpointCommit,
@@ -1266,7 +1476,7 @@ async function runStandardTask(target, prepared, request) {
         repository.integrationHead,
         readyStateHistory,
         true,
-        "STANDARD",
+        mode,
       ),
       "result.json": resultArtifact,
     };
@@ -1285,7 +1495,7 @@ async function runStandardTask(target, prepared, request) {
       `core.hooksPath=${commandGuard.emptyHooks}`,
       "commit",
       "-m",
-      `chore: record STANDARD run readiness (${runId})`,
+      `chore: record ${mode} run readiness (${runId})`,
     ]);
     const head = await git(worktree, ["rev-parse", "HEAD"]);
     await validateCommittedTree(worktree, head, terminalTree);
@@ -1310,6 +1520,7 @@ async function runStandardTask(target, prepared, request) {
       specReview,
       qualityReview,
       verification,
+      ...(mode === "DEEP" ? { migrationManifest: artifacts["migration-manifest.json"] } : {}),
       ...(context.remoteSync.enabled ? { remoteSync: context.remoteSync } : {}),
       run: runEvidence(
         runId,
@@ -1459,6 +1670,7 @@ async function blockStandardSchema(context, stage, checkId) {
 
 /** @param {Record<string, any>} context */
 async function blockStandardRun(context) {
+  const mode = context.mode ?? "STANDARD";
   transitionState(context.stateHistory, "BLOCKED");
   const stateArtifact = runStateArtifact(
     context.runId,
@@ -1466,7 +1678,7 @@ async function blockStandardRun(context) {
     context.repository.integrationHead,
     context.stateHistory,
     true,
-    "STANDARD",
+    mode,
   );
   const resultArtifact = {
     schemaVersion: 1,
@@ -1474,7 +1686,7 @@ async function blockStandardRun(context) {
     terminal: true,
     accepted: false,
     releaseStateReached: false,
-    mode: "STANDARD",
+    mode,
     branch: context.branch,
     baseCommit: context.repository.integrationHead,
     failure: context.failure,
@@ -1578,7 +1790,7 @@ async function persistStandardHumanGate(context, humanGate, reportExtras = {}, c
     context.repository.integrationHead,
     context.stateHistory,
     false,
-    "STANDARD",
+    context.mode,
   );
   const resultArtifact = {
     schemaVersion: 1,
@@ -1586,7 +1798,7 @@ async function persistStandardHumanGate(context, humanGate, reportExtras = {}, c
     terminal: false,
     accepted: false,
     releaseStateReached: false,
-    mode: "STANDARD",
+    mode: context.mode,
     branch: context.branch,
     baseCommit: context.repository.integrationHead,
     humanGate,
@@ -1609,7 +1821,10 @@ async function persistStandardHumanGate(context, humanGate, reportExtras = {}, c
   await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
   let head = await git(context.worktree, ["rev-parse", "HEAD"]);
   if (checkpoint) {
-    await git(context.worktree, ["add", "--", context.artifactPath]);
+    const controlledPaths = context.mode === "DEEP"
+      ? deepDecisionControlledPaths(context.artifacts["domain-decisions.json"])
+      : [];
+    await git(context.worktree, ["add", "--", ...controlledPaths, context.artifactPath]);
     await validateGitArtifacts(context.worktree, "index", context.artifactPath, expectedArtifacts);
     const gateTree = await git(context.worktree, ["write-tree"]);
     await git(context.worktree, [
@@ -1617,7 +1832,7 @@ async function persistStandardHumanGate(context, humanGate, reportExtras = {}, c
       `core.hooksPath=${context.commandGuard.emptyHooks}`,
       "commit",
       "-m",
-      `chore: record STANDARD Human Gate ${humanGate.id} (${context.runId})`,
+      `chore: record ${context.mode} Human Gate ${humanGate.id} (${context.runId})`,
     ]);
     head = await git(context.worktree, ["rev-parse", "HEAD"]);
     await validateCommittedTree(context.worktree, head, gateTree);
@@ -1737,11 +1952,162 @@ async function recordStandardDecision(context, request, gate) {
   return answeredGate;
 }
 
+/** @param {unknown} humanAnswersValue */
+function validateDeepManifestAnswer(humanAnswersValue) {
+  if (humanAnswersValue === undefined) {
+    return;
+  }
+  const humanAnswers = /** @type {Record<string, any>} */ (humanAnswersValue);
+  if (
+    !humanAnswersValue ||
+    typeof humanAnswersValue !== "object" ||
+    Array.isArray(humanAnswersValue) ||
+    JSON.stringify(Object.keys(humanAnswers)) !== JSON.stringify(["migration-manifest"]) ||
+    typeof humanAnswers["migration-manifest"] !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(humanAnswers["migration-manifest"])
+  ) {
+    throw new Error("humanAnswers must contain only the exact DEEP Migration Manifest hash.");
+  }
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>} request @param {Record<string, any>} gate @param {Record<string, any>} manifest */
+async function recordDeepManifestApproval(context, request, gate, manifest) {
+  const answer = request.humanAnswers?.["migration-manifest"];
+  if (
+    gate?.kind !== "MIGRATION_MANIFEST" ||
+    gate.id !== "migration-manifest" ||
+    gate.status !== "WAITING" ||
+    gate.requestHash !== standardRequestBindingHash(request) ||
+    gate.manifestHash !== manifest.hash ||
+    answer !== manifest.hash
+  ) {
+    throw new Error("Durable DEEP Migration Manifest gate does not match its exact human approval or request binding.");
+  }
+  const approval = {
+    schemaVersion: 1,
+    manifestHash: manifest.hash,
+    approved: true,
+  };
+  const answeredGate = {
+    ...gate,
+    status: "ANSWERED",
+    answer: { value: answer },
+  };
+  context.artifacts["human-gate.json"] = answeredGate;
+  context.artifacts["manifest-approval.json"] = approval;
+  delete context.artifacts["result.json"];
+  transitionState(context.stateHistory, "MANIFEST_APPROVED");
+  const expectedArtifacts = {
+    ...context.artifacts,
+    "state.json": runStateArtifact(
+      context.runId,
+      context.branch,
+      context.repository.integrationHead,
+      context.stateHistory,
+      false,
+      "DEEP",
+    ),
+    "task-profile.json": context.taskProfile,
+    "verification.json": context.verification,
+  };
+  await removeUnexpectedRunArtifacts(context.artifactRoot, new Set(Object.keys(expectedArtifacts)));
+  await Promise.all(
+    Object.entries(expectedArtifacts).map(([name, value]) =>
+      writeJson(path.join(context.artifactRoot, name), value),
+    ),
+  );
+  await validateRunArtifacts(context.artifactRoot, expectedArtifacts);
+  await git(context.worktree, ["add", "--", context.artifactPath]);
+  await validateGitArtifacts(context.worktree, "index", context.artifactPath, expectedArtifacts);
+  await git(context.worktree, [
+    "-c",
+    `core.hooksPath=${context.commandGuard.emptyHooks}`,
+    "commit",
+    "-m",
+    `chore: record DEEP Migration Manifest approval (${context.runId})`,
+  ]);
+  context.decisionCommit = await git(context.worktree, ["rev-parse", "HEAD"]);
+  return approval;
+}
+
+/** @param {string} requestHash @param {string[]} researchFactIds @param {Record<string, any>} manifest @returns {Record<string, any>} */
+export function createMigrationManifestHumanGate(requestHash, researchFactIds, manifest) {
+  const destructivePaths = manifest.actions.flatMap((/** @type {any} */ action) =>
+    action.action === "MOVE" ? [action.path, action.destination] : [action.path],
+  ).sort();
+  return createStandardHumanGate({
+    id: "migration-manifest",
+    kind: "MIGRATION_MANIFEST",
+    requestHash,
+    createdFromState: "MANIFEST_APPROVAL",
+    researchFactIds,
+    question: {
+      prompt: `Approve destructive Migration Manifest ${manifest.hash}?`,
+      recommendation: {
+        answer: manifest.hash,
+        consequence: "Advisor and Worker may proceed only for this exact reviewed scope.",
+      },
+      alternatives: [],
+    },
+    extra: { manifestHash: manifest.hash, destructivePaths },
+  });
+}
+
+/** @param {string} worktree @param {Record<string, any>[]} decisions */
+async function recordDeepDomainDecisions(worktree, decisions) {
+  const contextPath = ".engineering/CONTEXT.md";
+  const absoluteContextPath = path.join(worktree, ...contextPath.split("/"));
+  let contextSource = await readFile(absoluteContextPath, "utf8");
+  /** @type {string[]} */
+  const contextPaths = [];
+  for (const decision of decisions) {
+    if (decision.record === "CONTEXT") {
+      const marker = `<!-- engineering-loop:deep-decision:${decision.id} -->`;
+      if (!contextSource.includes(marker)) {
+        const separator = contextSource.endsWith("\n") ? "" : "\n";
+        contextSource += `${separator}\n${marker}\n- ${decision.statement}\n`;
+      }
+      if (!contextPaths.includes(contextPath)) {
+        contextPaths.push(contextPath);
+      }
+      continue;
+    }
+    const adrPath = `.engineering/adrs/ADR-${decision.id}.md`;
+    const absoluteAdrPath = path.join(worktree, ...adrPath.split("/"));
+    const source = `# ${decision.id}\n\n## Decision\n\n${decision.statement}\n\n## Domain boundaries\n\n${decision.boundaryIds.map((/** @type {string} */ id) => `- ${id}`).join("\n")}\n\n## Evidence\n\n${decision.evidenceIds.map((/** @type {string} */ id) => `- ${id}`).join("\n")}\n`;
+    try {
+      if (await readFile(absoluteAdrPath, "utf8") !== source) {
+        throw new Error(`DEEP ADR path already contains a different decision: ${adrPath}`);
+      }
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+        throw error;
+      }
+      await writeFile(absoluteAdrPath, source, "utf8");
+    }
+    contextPaths.push(adrPath);
+  }
+  if (contextPaths.includes(contextPath)) {
+    await writeFile(absoluteContextPath, contextSource, "utf8");
+  }
+  return contextPaths.sort();
+}
+
 /** @param {unknown} humanGate */
 function decisionControlledPaths(humanGate) {
   const gate = /** @type {Record<string, any> | null} */ (humanGate && typeof humanGate === "object" ? humanGate : null);
   return gate?.kind === "DECISION" && gate.status === "ANSWERED" && Array.isArray(gate.contextPaths)
     ? gate.contextPaths
+    : [];
+}
+
+/** @param {unknown} value */
+function deepDecisionControlledPaths(value) {
+  const artifact = /** @type {Record<string, any> | null} */ (
+    value && typeof value === "object" && !Array.isArray(value) ? value : null
+  );
+  return artifact?.schemaVersion === 1 && Array.isArray(artifact.contextPaths)
+    ? artifact.contextPaths
     : [];
 }
 
@@ -2287,8 +2653,8 @@ async function cleanupCommandGuard(guard) {
   }
 }
 
-/** @param {string} worktreeRoot @param {string} requestHash @param {string} baseCommit */
-async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
+/** @param {string} worktreeRoot @param {string} requestHash @param {string} baseCommit @param {"STANDARD" | "DEEP"} [mode] */
+async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, mode = "STANDARD") {
   let entries;
   try {
     entries = await readdir(worktreeRoot, { withFileTypes: true });
@@ -2317,7 +2683,8 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
       ]);
       if (
         !graph &&
-        state.mode === "STANDARD" &&
+        mode === "STANDARD" &&
+        state.mode === mode &&
         state.terminal === false &&
         state.runId === runId &&
         state.baseCommit === baseCommit &&
@@ -2353,7 +2720,135 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
         continue;
       }
       if (
-        state.mode !== "STANDARD" ||
+        graph &&
+        mode === "DEEP" &&
+        state.mode === mode &&
+        state.terminal === false &&
+        state.runId === runId &&
+        state.baseCommit === baseCommit &&
+        graph.runId === runId &&
+        graph.requestHash === requestHash &&
+        graph.decisionCommit === null &&
+        graph.executionOrder.length === 0 &&
+        humanGate?.kind === "MIGRATION_MANIFEST" &&
+        humanGate.status === "ANSWERED" &&
+        humanGate.requestHash === requestHash
+      ) {
+        const [head, currentBranch, status] = await Promise.all([
+          git(worktree, ["rev-parse", "HEAD"]),
+          git(worktree, ["branch", "--show-current"]),
+          git(worktree, ["status", "--porcelain"]),
+        ]);
+        const [parent, subject] = await Promise.all([
+          git(worktree, ["show", "-s", "--format=%P", head]),
+          git(worktree, ["show", "-s", "--format=%s", head]),
+        ]);
+        const [parentSubject, parentParents, waitingGate, approval] = await Promise.all([
+          git(worktree, ["show", "-s", "--format=%s", parent]),
+          git(worktree, ["show", "-s", "--format=%P", parent]),
+          readGitJson(worktree, parent, `.engineering/runs/${runId}/human-gate.json`),
+          readJson(path.join(artifactRoot, "manifest-approval.json")),
+        ]);
+        if (
+          status !== "" ||
+          currentBranch !== state.branch ||
+          !subject.includes(`record DEEP Migration Manifest approval (${runId})`) ||
+          !parentSubject.includes(`record DEEP Human Gate ${humanGate.id}`) ||
+          parentParents !== baseCommit ||
+          waitingGate?.kind !== "MIGRATION_MANIFEST" ||
+          waitingGate.status !== "WAITING" ||
+          waitingGate.requestHash !== requestHash ||
+          waitingGate.manifestHash !== humanGate.manifestHash ||
+          approval?.approved !== true ||
+          approval.manifestHash !== humanGate.manifestHash ||
+          humanGate.answer?.value !== humanGate.manifestHash
+        ) {
+          throw new Error(`Resumable DEEP manifest approval ${runId} does not match its durable gate.`);
+        }
+        graph.decisionCommit = head;
+        const artifacts = /** @type {Record<string, any>} */ ({
+          "human-gate.json": humanGate,
+          "manifest-approval.json": approval,
+          "ticket-graph.json": graph,
+        });
+        for (const name of [
+          "domain-decisions.json",
+          "domain-model.json",
+          "migration-contract.json",
+          "migration-manifest.json",
+          "research.json",
+          "rollback-plan.json",
+          "spec-lite.json",
+        ]) {
+          artifacts[name] = await readJson(path.join(artifactRoot, name));
+        }
+        candidates.push({
+          phase: "APPROVAL_CHECKPOINT",
+          runId,
+          branch: state.branch,
+          graph,
+          state,
+          verification,
+          artifacts,
+        });
+        continue;
+      }
+      if (
+        graph &&
+        mode === "DEEP" &&
+        state.mode === mode &&
+        state.terminal === false &&
+        state.runId === runId &&
+        state.baseCommit === baseCommit &&
+        graph.runId === runId &&
+        graph.requestHash === requestHash &&
+        humanGate?.kind === "MIGRATION_MANIFEST" &&
+        humanGate.status === "WAITING" &&
+        humanGate.requestHash === requestHash
+      ) {
+        const [head, currentBranch, status] = await Promise.all([
+          git(worktree, ["rev-parse", "HEAD"]),
+          git(worktree, ["branch", "--show-current"]),
+          git(worktree, ["status", "--porcelain"]),
+        ]);
+        const [parents, subject] = await Promise.all([
+          git(worktree, ["show", "-s", "--format=%P", head]),
+          git(worktree, ["show", "-s", "--format=%s", head]),
+        ]);
+        if (
+          status !== "" ||
+          currentBranch !== state.branch ||
+          parents !== baseCommit ||
+          !subject.includes(`record DEEP Human Gate ${humanGate.id}`)
+        ) {
+          throw new Error(`Resumable DEEP manifest gate ${runId} has drift or does not match its durable base.`);
+        }
+        const artifacts = /** @type {Record<string, any>} */ ({ "human-gate.json": humanGate });
+        for (const name of [
+          "domain-decisions.json",
+          "domain-model.json",
+          "migration-contract.json",
+          "migration-manifest.json",
+          "research.json",
+          "rollback-plan.json",
+          "spec-lite.json",
+          "ticket-graph.json",
+        ]) {
+          artifacts[name] = await readJson(path.join(artifactRoot, name));
+        }
+        candidates.push({
+          phase: "MANIFEST_GATE",
+          runId,
+          branch: state.branch,
+          graph,
+          state,
+          verification,
+          artifacts,
+        });
+        continue;
+      }
+      if (
+        state.mode !== mode ||
         state.terminal !== false ||
         !graph ||
         graph.schemaVersion !== 1 ||
@@ -2371,12 +2866,19 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
         git(worktree, ["branch", "--show-current"]),
       ]);
       if (currentBranch !== graph.branch) {
-        throw new Error(`Resumable STANDARD worktree ${runId} is on an unexpected branch.`);
+        throw new Error(`Resumable ${mode} worktree ${runId} is on an unexpected branch.`);
       }
-      await reconcileCheckpointFromHead(graph, head, graph.decisionCommit ?? baseCommit, worktree, artifactRoot);
+      await reconcileCheckpointFromHead(
+        graph,
+        head,
+        graph.decisionCommit ?? baseCommit,
+        worktree,
+        artifactRoot,
+        mode,
+      );
       const completedCommits = checkpointCommitsInExecutionOrder(graph);
       if ((completedCommits.at(-1) ?? graph.decisionCommit ?? baseCommit) !== head) {
-        throw new Error(`Resumable STANDARD worktree ${runId} does not match its durable checkpoint.`);
+        throw new Error(`Resumable ${mode} worktree ${runId} does not match its durable checkpoint.`);
       }
       const artifacts = /** @type {Record<string, any>} */ ({});
       for (const name of [
@@ -2386,6 +2888,16 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
         "spec-lite.json",
         "ticket-graph.json",
         "ticket.json",
+        ...(mode === "DEEP"
+          ? [
+              "domain-decisions.json",
+              "domain-model.json",
+              "manifest-approval.json",
+              "migration-contract.json",
+              "migration-manifest.json",
+              "rollback-plan.json",
+            ]
+          : []),
       ]) {
         artifacts[name] = await readJson(path.join(artifactRoot, name));
       }
@@ -2405,7 +2917,7 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit) {
     }
   }
   if (candidates.length > 1) {
-    throw new Error("Multiple resumable STANDARD runs match the same request.");
+    throw new Error(`Multiple resumable ${mode} runs match the same request.`);
   }
   return candidates[0] ?? null;
 }
@@ -2903,8 +3415,15 @@ export function checkpointCommitsInExecutionOrder(graph) {
   });
 }
 
-/** @param {Record<string, any>} graph @param {string} head @param {string} baseCommit @param {string} worktree @param {string} artifactRoot */
-async function reconcileCheckpointFromHead(graph, head, baseCommit, worktree, artifactRoot) {
+/** @param {Record<string, any>} graph @param {string} head @param {string} baseCommit @param {string} worktree @param {string} artifactRoot @param {"STANDARD" | "DEEP"} [mode] */
+async function reconcileCheckpointFromHead(
+  graph,
+  head,
+  baseCommit,
+  worktree,
+  artifactRoot,
+  mode = "STANDARD",
+) {
   const completedCommits = checkpointCommitsInExecutionOrder(graph);
   const previous = completedCommits.at(-1) ?? baseCommit;
   if (previous === head) {
@@ -2918,7 +3437,7 @@ async function reconcileCheckpointFromHead(graph, head, baseCommit, worktree, ar
       !ticket.checkpointCommit,
   );
   if (parents.length !== 1 || parents[0] !== previous || candidates.length !== 1) {
-    throw new Error(`Resumable STANDARD worktree ${graph.runId} does not match its durable checkpoint.`);
+    throw new Error(`Resumable ${mode} worktree ${graph.runId} does not match its durable checkpoint.`);
   }
   const ticket = candidates[0];
   const subject = await git(worktree, ["show", "-s", "--format=%s", head]);
@@ -2932,12 +3451,12 @@ async function reconcileCheckpointFromHead(graph, head, baseCommit, worktree, ar
     (/** @type {any} */ candidate) => candidate.id === ticket.id,
   );
   if (
-    !subject.includes(`complete STANDARD ticket ${ticket.id}`) ||
+    !subject.includes(`complete ${mode} ticket ${ticket.id}`) ||
     committedTicket?.status !== "IN_PROGRESS" ||
     committedTicket?.verification?.status !== "PASS" ||
     JSON.stringify(committedGraph.executionOrder) !== JSON.stringify(graph.executionOrder)
   ) {
-    throw new Error(`Resumable STANDARD checkpoint ${head} cannot be reconciled safely.`);
+    throw new Error(`Resumable ${mode} checkpoint ${head} cannot be reconciled safely.`);
   }
   ticket.status = "COMPLETE";
   ticket.checkpointCommit = head;
@@ -3174,7 +3693,8 @@ function parseWorkerVerification(source, verificationId) {
 
 /** @param {Record<string, any>} context @param {string} role @param {string[]} requirements */
 async function createReviewPacket(context, role, requirements) {
-  const artifactNames =
+  const artifactNames = [
+    ...(
     role === "SPEC_REVIEWER"
       ? [
           "advisor.json",
@@ -3190,7 +3710,18 @@ async function createReviewPacket(context, role, requirements) {
           "ticket-graph.json",
           "ticket.json",
           "verification.json",
-        ];
+        ]),
+    ...(context.mode === "DEEP"
+      ? [
+          "domain-decisions.json",
+          "domain-model.json",
+          "manifest-approval.json",
+          "migration-contract.json",
+          "migration-manifest.json",
+          "rollback-plan.json",
+        ]
+      : []),
+  ];
   const artifactHashes = [];
   for (const name of artifactNames) {
     const projectPath = `${context.artifactPath}/${name}`;

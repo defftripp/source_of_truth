@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "checks": [
+    { "id": "prepared-project-smoke", "role": "smoke", "command": ["node", ".engineering/runtime/engine.mjs", "--smoke"] },
+    { "id": "repository-research", "role": "research", "command": ["node", "scripts/research.mjs"] },
+    { "id": "missing-evidence-research", "role": "research", "command": ["node", "scripts/research.mjs", "missing-evidence"] },
+    { "id": "deep-planner", "role": "planner", "command": ["node", "scripts/planner.mjs"] },
+    { "id": "changed-scope-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "changed-scope"] },
+    { "id": "advisor-gate", "role": "advisor", "command": ["node", "scripts/advisor.mjs"] },
+    { "id": "bounded-worker", "role": "worker", "command": ["node", "scripts/worker.mjs"] },
+    { "id": "payment-test", "role": "ticket-verification", "command": ["node", "scripts/ticket-verification.mjs"] },
+    { "id": "spec-review", "role": "spec-review", "command": ["node", "scripts/spec-review.mjs"] },
+    { "id": "quality-review", "role": "quality-review", "command": ["node", "scripts/quality-review.mjs"] },
+    { "id": "full-test", "role": "test", "requiredForFast": false, "command": ["node", "--test", "test/payment.test.mjs"] },
+    { "id": "typecheck", "role": "typecheck", "requiredForFast": false, "command": ["node", "--check", "src/payment.mjs"] },
+    { "id": "build", "role": "build", "requiredForFast": false, "command": ["node", "scripts/build.mjs"] },
+    { "id": "observed-behavior", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/observe.mjs"] }
+  ]
+}

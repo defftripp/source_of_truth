@@ -11,6 +11,13 @@ export const TASK_PROFILE_EVIDENCE_FIELDS = Object.freeze([
 ]);
 
 const MODES = Object.freeze(["FAST", "STANDARD", "DEEP"]);
+export const HARD_TO_REVERSE_PROFILES = Object.freeze([
+  "NONE",
+  "SECURITY",
+  "PAYMENTS",
+  "DESTRUCTIVE_MIGRATION",
+  "OTHER_HARD_TO_REVERSE",
+]);
 const ALLOWED_EVIDENCE = Object.freeze({
   scope: Object.freeze(["LOCAL", "MULTI_PART", "SYSTEM"]),
   risk: Object.freeze(["LOW", "MEDIUM", "HIGH"]),
@@ -19,7 +26,7 @@ const ALLOWED_EVIDENCE = Object.freeze({
 });
 
 /**
- * @param {{ scope?: unknown, risk?: unknown, ambiguity?: unknown, reversibility?: unknown }} task
+ * @param {{ scope?: unknown, risk?: unknown, ambiguity?: unknown, reversibility?: unknown, hardToReverseProfile?: unknown }} task
  * @param {RootEscalation | undefined} [rootEscalation]
  */
 export function classifyTaskProfile(task, rootEscalation) {
@@ -28,9 +35,22 @@ export function classifyTaskProfile(task, rootEscalation) {
       throw new Error(`task.${field} must be supported Task Profile evidence.`);
     }
   }
+  const hardToReverseProfileProvided = task.hardToReverseProfile !== undefined;
+  const hardToReverseProfile = task.hardToReverseProfile ?? "NONE";
+  if (
+    typeof hardToReverseProfile !== "string" ||
+    !HARD_TO_REVERSE_PROFILES.includes(hardToReverseProfile)
+  ) {
+    throw new Error("task.hardToReverseProfile must be a supported risk profile.");
+  }
   /** @type {RunMode} */
   let hardFloor = "FAST";
-  if (task.scope === "SYSTEM" || task.risk === "HIGH" || task.reversibility === "HARD") {
+  if (
+    hardToReverseProfile !== "NONE" ||
+    task.scope === "SYSTEM" ||
+    task.risk === "HIGH" ||
+    task.reversibility === "HARD"
+  ) {
     hardFloor = "DEEP";
   } else if (
     task.scope === "MULTI_PART" ||
@@ -68,7 +88,10 @@ export function classifyTaskProfile(task, rootEscalation) {
   }
   const rationale = recordedEscalation
     ? `${selectedMode} selected above the ${hardFloor} hard floor: ${recordedEscalation.evidence.join(" ")}`
-    : `${selectedMode} is the hard floor for ${TASK_PROFILE_EVIDENCE_FIELDS.map((field) => `${field}=${task[field]}`).join(", ")}.`;
+    : `${selectedMode} is the hard floor for ${[
+        ...TASK_PROFILE_EVIDENCE_FIELDS.map((field) => `${field}=${task[field]}`),
+        ...(hardToReverseProfileProvided ? [`hardToReverseProfile=${hardToReverseProfile}`] : []),
+      ].join(", ")}.`;
   return {
     schemaVersion: 1,
     selectedMode,
@@ -76,7 +99,10 @@ export function classifyTaskProfile(task, rootEscalation) {
     routineConfirmationRequired: false,
     rationale,
     taskEvidence: Object.fromEntries(
-      TASK_PROFILE_EVIDENCE_FIELDS.map((field) => [field, task[field]]),
+      [
+        ...TASK_PROFILE_EVIDENCE_FIELDS.map((field) => [field, task[field]]),
+        ...(hardToReverseProfileProvided ? [["hardToReverseProfile", hardToReverseProfile]] : []),
+      ],
     ),
     ...(recordedEscalation ? { rootEscalation: recordedEscalation } : {}),
   };

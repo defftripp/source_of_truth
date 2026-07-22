@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Execute a minimal one-ticket DEEP lifecycle through linked domain evidence,
+  canonical CONTEXT/ADR decision records, migration and rollback contracts,
+  exact hash-bound and Write-Lease-bound durable Human Gate approval,
+  independent reviews, final instrumental verification, and READY_FOR_HUMAN.
+- Make security, payments, destructive migrations, and other named
+  hard-to-reverse profiles deterministic DEEP floors; block missing high-risk
+  evidence and changed destructive scope before Worker.
 - Stop ambiguous STANDARD runs after repository research at one durable,
   recommendation-bearing Human Gate; resume the same request after an answer,
   update CONTEXT idempotently, and create ADRs only for surprising

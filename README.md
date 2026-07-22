@@ -54,11 +54,13 @@ node <project>/.engineering/runtime/engine.mjs --run-request <request.json>
 ```
 
 The schema `1` request supplies a structured Task Profile with `scope`, `risk`,
-`ambiguity`, and `reversibility` evidence. File count is not a policy input: a
+`ambiguity`, `reversibility`, and an optional `hardToReverseProfile`. File count is not a policy input: a
 small cross-file change remains FAST when the evidence is `LOCAL`, `LOW`,
 `NONE`, and `EASY`. `MULTI_PART`, `MEDIUM`, `MATERIAL`, or `MODERATE` evidence
 establishes at least a STANDARD floor; `SYSTEM`, `HIGH`, or `HARD` evidence
-establishes a DEEP floor. Root may provide a `rootEscalation` to raise that mode
+establishes a DEEP floor. `SECURITY`, `PAYMENTS`, `DESTRUCTIVE_MIGRATION`, and
+`OTHER_HARD_TO_REVERSE` profiles also establish a DEEP floor regardless of the
+generic evidence. Root may provide a `rootEscalation` to raise that mode
 only when it records concise evidence, and can never select below the computed
 hard floor.
 
@@ -78,8 +80,25 @@ declare `requiredForFast: false`.
 
 Invocation output always includes the selected mode, deterministic hard floor,
 brief rationale, and evidence without requesting routine confirmation. FAST
-continues into execution. DEEP returns `MODE_SELECTED` without creating a Run
-Branch because its execution lifecycle is a separate contract.
+continues into execution. A DEEP request supplies the planned-run contract plus
+required high-risk evidence IDs; it executes on an isolated `run/deep/*` branch.
+
+DEEP uses the same state machine, ticket graph, bounded Worker, Root checkpoint,
+durable local resume, independent review, instrumental verification, and Git
+safety contracts as STANDARD. Before planning, research must link every required
+high-risk fact to named domain boundaries. Root records the related decisions in
+canonical `.engineering/CONTEXT.md` and `.engineering/adrs/` entries before the
+Planner adds a dependency graph, migration contract, rollback plan, and
+destructive Migration Manifest. The plan must reference exactly the researched
+domain boundaries, and manifest source/destination paths must equal the Worker's
+Write Lease. The runtime recomputes the manifest hash from the complete action
+scope, durably pauses at the shared Human Gate, and resumes only when
+`--human-answer` supplies that exact hash against the same request binding. Any
+changed scope stops before Advisor and Worker.
+Missing mandatory evidence produces terminal `BLOCKED`, never a degraded
+success. A successful one-ticket DEEP run passes fresh Spec and Quality reviews,
+reruns every selected instrumental check, and stops at `READY_FOR_HUMAN` with
+`accepted: false`.
 
 The installed V1 runtime executes blockers-first STANDARD ticket graphs end to end.
 STANDARD records evidence-backed repository facts, a spec-lite with falsifiable

@@ -56,3 +56,23 @@ separate fresh read-only contexts, runs the full relevant instrumental checks,
 and rejects evidence if any ticket's leased tree has changed since its targeted
 verification. A successful run creates a terminal evidence commit on the
 isolated Run Branch and stops at READY_FOR_HUMAN.
+
+DEEP is a hard floor for security, payments, destructive migrations, and other
+explicitly hard-to-reverse profiles. It extends this same planned-run state
+machine rather than introducing another executor. Repository research must link
+all mandatory high-risk evidence to domain boundaries. Root then persists the
+related decisions in canonical `.engineering/CONTEXT.md` and
+`.engineering/adrs/` records before specification and planning.
+
+Before Advisor approval, the DEEP Planner must provide the ticket dependency
+graph, migration preconditions and postconditions, rollback triggers, rollback
+steps and verification, plus a destructive Migration Manifest. The plan's domain
+references must exactly match the researched boundaries, and the manifest's
+source/destination paths must exactly match the Worker Write Lease. Human
+approval uses the shared durable Human Gate: the run checkpoints the proposed
+scope, pauses, and resumes only for the exact canonical manifest action hash
+bound to the same request. Missing high-risk evidence blocks the run; an
+incomplete plan is REVISE; and changed destructive scope
+blocks before Advisor or Worker. Successful DEEP work uses the inherited Worker
+guard, Root checkpoints, durable local resume, independent reviews, final
+instrumental verification, and READY_FOR_HUMAN terminal gate.

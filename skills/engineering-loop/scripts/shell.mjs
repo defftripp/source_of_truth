@@ -18,6 +18,7 @@ export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering/runs/.gitkeep",
   ".engineering/runtime",
   ".engineering/runtime/contracts.mjs",
+  ".engineering/runtime/deep-contracts.mjs",
   ".engineering/runtime/engine.mjs",
   ".engineering/runtime/manifest.json",
   ".engineering/runtime/methodology.md",
@@ -82,6 +83,7 @@ async function canonicalShellFileContent(projectPath) {
   if (projectPath === ".engineering/runtime/manifest.json") {
     const ownedFiles = [
       "runtime/contracts.mjs",
+      "runtime/deep-contracts.mjs",
       "runtime/engine.mjs",
       "runtime/methodology.md",
       "runtime/mode-policy.mjs",

@@ -48,6 +48,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
       ".engineering/specs/.gitkeep",
       ".engineering/tickets/.gitkeep",
       ".engineering/runtime/contracts.mjs",
+      ".engineering/runtime/deep-contracts.mjs",
       ".engineering/runtime/engine.mjs",
       ".engineering/runtime/manifest.json",
       ".engineering/runtime/methodology.md",

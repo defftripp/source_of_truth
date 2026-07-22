@@ -120,6 +120,35 @@ test("unsupported Task Profile evidence is rejected instead of defaulting to FAS
   );
 });
 
+for (const hardToReverseProfile of [
+  "SECURITY",
+  "PAYMENTS",
+  "DESTRUCTIVE_MIGRATION",
+  "OTHER_HARD_TO_REVERSE",
+]) {
+  test(`${hardToReverseProfile} establishes a deterministic DEEP hard floor`, () => {
+    const profile = classifyTaskProfile(taskEvidence({ hardToReverseProfile }));
+
+    assert.equal(profile.hardFloor, "DEEP");
+    assert.equal(profile.selectedMode, "DEEP");
+    assert.equal(profile.taskEvidence.hardToReverseProfile, hardToReverseProfile);
+    assert.throws(
+      () => classifyTaskProfile(taskEvidence({ hardToReverseProfile }), {
+        mode: "STANDARD",
+        evidence: ["Attempt a shorter workflow."],
+      }),
+      /below.*DEEP.*hard floor/iu,
+    );
+  });
+}
+
+test("unsupported hard-to-reverse profiles are rejected instead of losing the DEEP floor", () => {
+  assert.throws(
+    () => classifyTaskProfile(taskEvidence({ hardToReverseProfile: "UNKNOWN" })),
+    /hardToReverseProfile/iu,
+  );
+});
+
 function taskEvidence(overrides = {}) {
   return {
     summary: "Apply a clear local change",
