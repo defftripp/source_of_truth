@@ -18,6 +18,12 @@ import {
   validateDeepResearchContract,
 } from "./deep-contracts.mjs";
 import { evaluateDeepParallelEligibility } from "./parallel-eligibility.mjs";
+import {
+  createCorrectiveTickets,
+  validateImmutableReviewArtifacts,
+  validateIndependentReview,
+  validateReviewReleaseEvidence,
+} from "./review-contracts.mjs";
 
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
@@ -437,6 +443,7 @@ async function runFastTask(target, prepared, request) {
     stateHistory,
     verification,
     writeLease: request.writeLease,
+    requestWriteLease: request.writeLease,
     commandGuard,
   };
 
@@ -737,7 +744,7 @@ async function runStandardTask(target, prepared, request) {
   const artifactRoot = path.join(worktree, ...artifactPath.split("/"));
   /** @type {{ sequence: number, state: string, status: string }[]} */
   const stateHistory = resumable?.state.history ?? [];
-  /** @type {{ schemaVersion: number, checks: any[] }} */
+  /** @type {Record<string, any>} */
   const verification = resumable?.verification ?? { schemaVersion: 1, checks: [] };
   const artifacts = /** @type {Record<string, any>} */ (resumable?.artifacts ?? {});
   const checkpointCommits = resumable?.graph ? checkpointCommitsInExecutionOrder(resumable.graph) : [];
@@ -765,6 +772,7 @@ async function runStandardTask(target, prepared, request) {
     stateHistory,
     verification,
     writeLease: request.writeLease,
+    requestWriteLease: request.writeLease,
     commandGuard,
     artifacts,
     mode,
@@ -914,6 +922,7 @@ async function runStandardTask(target, prepared, request) {
       requestHash,
       decisionCommit: context.decisionCommit ?? null,
       executionOrder: [],
+      reviewRounds: [],
       tickets: planned.tickets.map((ticket) => ({
         ...ticket,
         status: "OPEN",
@@ -1022,10 +1031,14 @@ async function runStandardTask(target, prepared, request) {
         }
       }
       specLite = artifacts["spec-lite.json"];
+      ticketGraph.reviewRounds ??= [];
+      const plannedTickets = ticketGraph.tickets.filter(
+        (/** @type {any} */ ticket) => !ticket.sourceFinding,
+      );
       planned = parseExecutionPlan(
         JSON.stringify({
           schemaVersion: 1,
-          tickets: ticketGraph.tickets.map(ticketContract),
+          tickets: plannedTickets.map(ticketContract),
         }),
         mode === "DEEP" ? { ...request, standard: plannedRequest } : request,
         commands,
@@ -1036,7 +1049,7 @@ async function runStandardTask(target, prepared, request) {
           domainBoundaryIds: artifacts["domain-model.json"].boundaries.map(
             (/** @type {any} */ boundary) => boundary.id,
           ),
-          tickets: ticketGraph.tickets.map(ticketContract),
+          tickets: plannedTickets.map(ticketContract),
           migrationContract: artifacts["migration-contract.json"],
           rollbackPlan: artifacts["rollback-plan.json"],
           migrationManifest: artifacts["migration-manifest.json"],
@@ -1145,7 +1158,11 @@ async function runStandardTask(target, prepared, request) {
     const pendingParallelResults = new Map();
     /** @type {Record<string, any> | null} */
     let activeExecutionBatch = null;
+    let specReview;
+    let qualityReview;
 
+    reviewLifecycle:
+    while (true) {
     while (ticketGraph.tickets.some((/** @type {any} */ ticket) => ticket.status !== "COMPLETE")) {
       const frontier = selectDeterministicFrontier(
         ticketGraph.tickets,
@@ -1251,6 +1268,7 @@ async function runStandardTask(target, prepared, request) {
         dependencies: ticket.dependencies,
         writeLease: ticket.writeLease,
         ...(ticket.contractIds ? { contractIds: ticket.contractIds } : {}),
+        ...(ticket.sourceFinding ? { sourceFinding: ticket.sourceFinding } : {}),
         contextPaths: ticket.contextPaths,
       };
       artifacts["ticket.json"] = ticketArtifact;
@@ -1537,11 +1555,21 @@ async function runStandardTask(target, prepared, request) {
       }
     }
 
+    const immutableReviews = await reviewArtifactIntegrity(context, ticketGraph.reviewRounds);
+    if (!immutableReviews.valid) {
+      return blockStandardSchema(context, "SPEC_REVIEW", "review-artifact-immutability");
+    }
+    const reviewRound = ticketGraph.reviewRounds.length + 1;
     transitionState(stateHistory, "SPEC_REVIEW");
     const specRequirements = plannedRequest.acceptanceCriteria.map(
       (/** @type {any} */ criterion) => criterion.id,
     );
-    const specReviewPacket = await createReviewPacket(context, "SPEC_REVIEWER", specRequirements);
+    const specReviewPacket = await createReviewPacket(
+      context,
+      "SPEC_REVIEWER",
+      specRequirements,
+      reviewRound,
+    );
     const specReviewExecution = await executeReadOnlyRunCommand(context, commands.specReview, {
       ENGINEERING_REVIEW_PACKET: specReviewPacket.path,
     });
@@ -1551,19 +1579,30 @@ async function runStandardTask(target, prepared, request) {
     if (specReviewExecution.result.exitCode !== 0) {
       return blockStandardAfterCommand(context, "SPEC_REVIEW", commands.specReview, specReviewExecution.result);
     }
-    let specReview;
     try {
       specReview = parseIndependentReview(
         specReviewExecution.result.stdout,
-        "SPEC_REVIEWER",
-        specReviewPacket.hash,
-        specRequirements,
+        {
+          role: "SPEC_REVIEWER",
+          packetHash: specReviewPacket.hash,
+          requirements: specRequirements,
+          writeLease: request.writeLease,
+          contextPaths: plannedRequest.contextPaths,
+          verificationIds: [
+            commands.ticketVerification.id,
+            ...commands.relevantChecks.map((command) => command.id),
+          ],
+          ticketVerificationId: commands.ticketVerification.id,
+          codeFingerprint: specReviewPacket.codeFingerprint,
+          reviewRound,
+        },
       );
     } catch {
       return blockStandardSchema(context, "SPEC_REVIEW", "spec-review-schema");
     }
-    artifacts["spec-review.json"] = specReview;
-    await writeJson(path.join(artifactRoot, "spec-review.json"), specReview);
+    const specReviewArtifact = reviewArtifactName("spec", reviewRound);
+    artifacts[specReviewArtifact] = specReview;
+    await writeJson(path.join(artifactRoot, specReviewArtifact), specReview);
 
     transitionState(stateHistory, "QUALITY_REVIEW");
     const qualityRequirements = [
@@ -1576,6 +1615,7 @@ async function runStandardTask(target, prepared, request) {
       context,
       "QUALITY_REVIEWER",
       qualityRequirements,
+      reviewRound,
     );
     const qualityReviewExecution = await executeReadOnlyRunCommand(context, commands.qualityReview, {
       ENGINEERING_REVIEW_PACKET: qualityReviewPacket.path,
@@ -1591,21 +1631,110 @@ async function runStandardTask(target, prepared, request) {
         qualityReviewExecution.result,
       );
     }
-    let qualityReview;
     try {
       qualityReview = parseIndependentReview(
         qualityReviewExecution.result.stdout,
-        "QUALITY_REVIEWER",
-        qualityReviewPacket.hash,
-        qualityRequirements,
+        {
+          role: "QUALITY_REVIEWER",
+          packetHash: qualityReviewPacket.hash,
+          requirements: qualityRequirements,
+          writeLease: request.writeLease,
+          contextPaths: plannedRequest.contextPaths,
+          verificationIds: [
+            commands.ticketVerification.id,
+            ...commands.relevantChecks.map((command) => command.id),
+          ],
+          ticketVerificationId: commands.ticketVerification.id,
+          codeFingerprint: qualityReviewPacket.codeFingerprint,
+          reviewRound,
+        },
       );
     } catch {
       return blockStandardSchema(context, "QUALITY_REVIEW", "quality-review-schema");
     }
-    artifacts["quality-review.json"] = qualityReview;
-    await writeJson(path.join(artifactRoot, "quality-review.json"), qualityReview);
+    const qualityReviewArtifact = reviewArtifactName("quality", reviewRound);
+    artifacts[qualityReviewArtifact] = qualityReview;
+    await writeJson(path.join(artifactRoot, qualityReviewArtifact), qualityReview);
+
+    let corrections;
+    try {
+      corrections = createCorrectiveTickets({
+        round: reviewRound,
+        reviews: [
+          { artifact: specReviewArtifact, review: specReview },
+          { artifact: qualityReviewArtifact, review: qualityReview },
+        ],
+        existingTicketIds: ticketGraph.tickets.map((/** @type {any} */ ticket) => ticket.id),
+      });
+    } catch {
+      return blockStandardSchema(context, "QUALITY_REVIEW", "review-finding-contract");
+    }
+    const reviewArtifacts = await Promise.all(
+      [specReviewArtifact, qualityReviewArtifact].map(async (name) => ({
+        name,
+        sha256: sha256(await readFile(path.join(artifactRoot, name))),
+      })),
+    );
+    ticketGraph.reviewRounds.push({
+      round: reviewRound,
+      codeFingerprint: specReview.context.codeFingerprint,
+      artifacts: reviewArtifacts,
+      reviews: {
+        spec: {
+          status: specReview.status,
+          codeFingerprint: specReview.context.codeFingerprint,
+        },
+        quality: {
+          status: qualityReview.status,
+          codeFingerprint: qualityReview.context.codeFingerprint,
+        },
+      },
+      findings: corrections.links,
+    });
+    if (corrections.tickets.length > 0) {
+      ticketGraph.tickets.push(...corrections.tickets);
+      const correctiveWork = artifacts["corrective-work.json"] ?? {
+        schemaVersion: 1,
+        kind: "REVIEW_CORRECTIONS",
+        status: "ACTIVE",
+        rounds: [],
+      };
+      correctiveWork.status = "ACTIVE";
+      correctiveWork.rounds.push({
+        reviewRound,
+        sourceArtifacts: [specReviewArtifact, qualityReviewArtifact],
+        links: corrections.links,
+      });
+      artifacts["corrective-work.json"] = correctiveWork;
+      artifacts["ticket-graph.json"] = ticketGraph;
+      await Promise.all([
+        writeJson(path.join(artifactRoot, "corrective-work.json"), correctiveWork),
+        writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph),
+      ]);
+      continue reviewLifecycle;
+    }
+    if (artifacts["corrective-work.json"]?.kind === "REVIEW_CORRECTIONS") {
+      artifacts["corrective-work.json"].status = "COMPLETE";
+      artifacts["corrective-work.json"].completedAfterReviewRound = reviewRound;
+      await writeJson(
+        path.join(artifactRoot, "corrective-work.json"),
+        artifacts["corrective-work.json"],
+      );
+    }
+    artifacts["ticket-graph.json"] = ticketGraph;
+    await writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph);
+    break reviewLifecycle;
+    }
 
     transitionState(stateHistory, "FULL_VERIFICATION");
+    const verificationCodeFingerprint = await applicationCodeFingerprint(context);
+    verification.fullRelevant = {
+      status: "RUNNING",
+      codeFingerprint: verificationCodeFingerprint,
+      afterExecutionCount: ticketGraph.executionOrder.length,
+      startedAtEpochMs: Date.now(),
+      checkIds: commands.relevantChecks.map((command) => command.id),
+    };
     if (parallelExecution) {
       parallelExecution.fullVerification = {
         afterIntegrationCount: ticketGraph.executionOrder.length,
@@ -1629,6 +1758,20 @@ async function runStandardTask(target, prepared, request) {
         return blockStandardAfterCommand(context, "FULL_VERIFICATION", command, execution.result);
       }
     }
+    const currentCodeFingerprint = await applicationCodeFingerprint(context);
+    if (currentCodeFingerprint !== verificationCodeFingerprint) {
+      verification.fullRelevant.status = "STALE";
+      verification.fullRelevant.endedAtEpochMs = Date.now();
+      await writeJson(path.join(artifactRoot, "verification.json"), verification);
+      return blockStandardSchema(
+        context,
+        "FULL_VERIFICATION",
+        "full-verification-freshness",
+      );
+    }
+    verification.fullRelevant.status = "PASS";
+    verification.fullRelevant.endedAtEpochMs = Date.now();
+    await writeJson(path.join(artifactRoot, "verification.json"), verification);
     if (parallelExecution) {
       parallelExecution.fullVerification.status = "PASS";
       parallelExecution.fullVerification.endedAtEpochMs = Date.now();
@@ -1654,6 +1797,27 @@ async function runStandardTask(target, prepared, request) {
       ) {
         return blockStandardSchema(context, "FULL_VERIFICATION", "verification-freshness");
       }
+    }
+    const immutableFinalReviews = await reviewArtifactIntegrity(context, ticketGraph.reviewRounds);
+    if (!immutableFinalReviews.valid) {
+      return blockStandardSchema(
+        context,
+        "FULL_VERIFICATION",
+        "review-artifact-immutability",
+      );
+    }
+    const releaseEvidence = validateReviewReleaseEvidence({
+      reviewRounds: ticketGraph.reviewRounds,
+      tickets: ticketGraph.tickets,
+      currentCodeFingerprint,
+      fullVerification: verification.fullRelevant,
+      executionCount: ticketGraph.executionOrder.length,
+    });
+    if (!releaseEvidence.valid) {
+      const checkId = releaseEvidence.errors.some((error) => /Review|review/u.test(error))
+        ? "review-freshness"
+        : "full-verification-freshness";
+      return blockStandardSchema(context, "FULL_VERIFICATION", checkId);
     }
 
     const implementationChanges = await changedPaths(worktree, repository.integrationHead);
@@ -1804,6 +1968,7 @@ function createWorkerContextPacket(ticket, request, specLite, restoredFromRemote
     contextPaths: ticket.contextPaths,
     writeLease: ticket.writeLease,
     ...(ticket.contractIds ? { contractIds: ticket.contractIds } : {}),
+    ...(ticket.sourceFinding ? { sourceFinding: ticket.sourceFinding } : {}),
     workerWorktree,
     resumedFromRemote: restoredFromRemote,
     rootWriter: false,
@@ -3562,7 +3727,7 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
         throw new Error(`Resumable ${mode} worktree ${runId} does not match its durable checkpoint.`);
       }
       const artifacts = /** @type {Record<string, any>} */ ({});
-      for (const name of [
+      const requiredArtifactNames = [
         "advisor.json",
         "context-packet.json",
         "research.json",
@@ -3580,8 +3745,57 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
               "rollback-plan.json",
             ]
           : []),
-      ]) {
+      ];
+      const artifactEntries = await readdir(artifactRoot, { withFileTypes: true });
+      const artifactNames = artifactEntries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name);
+      if (requiredArtifactNames.some((name) => !artifactNames.includes(name))) {
+        throw new Error(`Resumable ${mode} checkpoint is missing a required Run Artifact.`);
+      }
+      const expectedReviewArtifacts = reviewArtifactHashes(graph.reviewRounds ?? []);
+      const actualReviewArtifactNames = artifactNames
+        .filter((name) => name === "spec-review.json" || name === "quality-review.json" ||
+          isVersionedReviewArtifactName(name))
+        .sort();
+      if (
+        JSON.stringify(actualReviewArtifactNames) !==
+        JSON.stringify([...expectedReviewArtifacts.keys()].sort())
+      ) {
+        throw new Error(`Resumable ${mode} checkpoint review artifact set does not match graph history.`);
+      }
+      for (const [name, expectedHash] of expectedReviewArtifacts) {
+        if (sha256(await readFile(path.join(artifactRoot, name))) !== expectedHash) {
+          throw new Error(`Resumable ${mode} checkpoint review artifact changed: ${name}.`);
+        }
+      }
+      const expectsCorrectiveWork = graphHasCorrectiveReviewLinks(graph);
+      if (artifactNames.includes("corrective-work.json") !== expectsCorrectiveWork) {
+        throw new Error(`Resumable ${mode} corrective work does not match graph history.`);
+      }
+      const allowedArtifactNames = new Set([
+        ...requiredArtifactNames,
+        ...expectedReviewArtifacts.keys(),
+        ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
+        "human-gate.json",
+        "remote-sync.json",
+      ]);
+      for (const name of artifactNames) {
+        if (
+          ["result.json", "state.json", "task-profile.json", "verification.json"].includes(name)
+        ) {
+          continue;
+        }
+        if (!allowedArtifactNames.has(name)) {
+          throw new Error(`Resumable ${mode} checkpoint contains an unknown Run Artifact.`);
+        }
         artifacts[name] = await readJson(path.join(artifactRoot, name));
+      }
+      if (
+        expectsCorrectiveWork &&
+        !correctiveWorkMatchesGraph(graph, artifacts["corrective-work.json"])
+      ) {
+        throw new Error(`Resumable ${mode} corrective work changed after publication.`);
       }
       const remoteSync = await tryReadJson(path.join(artifactRoot, "remote-sync.json"));
       if (remoteSync) {
@@ -3739,6 +3953,15 @@ async function readGitJson(cwd, revision, projectPath) {
 }
 
 /** @param {string} cwd @param {string} revision @param {string} projectPath */
+async function readGitBlob(cwd, revision, projectPath) {
+  const result = await runProcess("git", ["show", `${revision}:${projectPath}`], cwd);
+  if (result.exitCode !== 0) {
+    throw new Error(`Git blob read failed for ${projectPath}.`);
+  }
+  return result.stdout;
+}
+
+/** @param {string} cwd @param {string} revision @param {string} projectPath */
 async function tryReadGitJson(cwd, revision, projectPath) {
   const source = await tryGit(cwd, ["show", `${revision}:${projectPath}`]);
   return source === null ? null : JSON.parse(source);
@@ -3866,18 +4089,34 @@ async function validateRemoteCheckpointArtifacts(
   branch,
 ) {
   const actualNames = await remoteRunArtifactNames(target, revision, artifactPath);
-  const allowedArtifactSets = [
-    [],
-    ["remote-sync.json"],
-    ["human-gate.json"],
-    ["human-gate.json", "remote-sync.json"],
-  ].map((optional) => [...STANDARD_CHECKPOINT_ARTIFACT_FILES, ...optional].sort());
-  if (!allowedArtifactSets.some((expected) => JSON.stringify(actualNames) === JSON.stringify(expected))) {
+  const requiredNames = new Set(STANDARD_CHECKPOINT_ARTIFACT_FILES);
+  const expectedReviewArtifacts = reviewArtifactHashes(graph.reviewRounds ?? []);
+  const expectsCorrectiveWork = graphHasCorrectiveReviewLinks(graph);
+  const allowedNames = new Set([
+    ...requiredNames,
+    ...expectedReviewArtifacts.keys(),
+    ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
+    "human-gate.json",
+    "remote-sync.json",
+  ]);
+  if (
+    [...requiredNames].some((name) => !actualNames.includes(name)) ||
+    [...expectedReviewArtifacts.keys()].some((name) => !actualNames.includes(name)) ||
+    actualNames.some((/** @type {string} */ name) => !allowedNames.has(name)) ||
+    actualNames.includes("corrective-work.json") !== expectsCorrectiveWork
+  ) {
     throw new Error("Remote STANDARD checkpoint Run Artifact set is not allowlisted.");
   }
   for (const name of actualNames) {
     const artifact = await readGitJson(target, revision, `${artifactPath}/${name}`);
     validateArtifactValue(artifact, name);
+    const expectedReviewHash = expectedReviewArtifacts.get(name);
+    if (
+      expectedReviewHash &&
+      sha256(await readGitBlob(target, revision, `${artifactPath}/${name}`)) !== expectedReviewHash
+    ) {
+      throw new Error(`Remote STANDARD checkpoint review artifact changed: ${name}.`);
+    }
     if (name === "ticket-graph.json" && JSON.stringify(artifact) !== JSON.stringify(graph)) {
       throw new Error("Remote STANDARD checkpoint graph changed during validation.");
     }
@@ -3891,6 +4130,12 @@ async function validateRemoteCheckpointArtifacts(
         branch,
         checkpointCommitsInExecutionOrder(graph),
       );
+    }
+    if (
+      name === "corrective-work.json" &&
+      !correctiveWorkMatchesGraph(graph, artifact)
+    ) {
+      throw new Error("Remote STANDARD checkpoint corrective work changed during validation.");
     }
   }
 }
@@ -4122,7 +4367,7 @@ async function restoreInterruptedDeepCheckpointIndex(graph, head, worktree, arti
   const entries = await readdir(artifactRoot, { withFileTypes: true });
   const expectedArtifacts = /** @type {Record<string, any>} */ ({});
   for (const entry of entries) {
-    if (!entry.isFile() || !RUN_ARTIFACT_FILES.has(entry.name)) {
+    if (!entry.isFile() || !isAllowedRunArtifactName(entry.name)) {
       throw new Error(`Resumable DEEP pre-commit artifact is not allowlisted: ${entry.name}.`);
     }
     expectedArtifacts[entry.name] = await readJson(path.join(artifactRoot, entry.name));
@@ -4512,8 +4757,8 @@ function parseWorkerVerification(source, verificationId) {
   };
 }
 
-/** @param {Record<string, any>} context @param {string} role @param {string[]} requirements */
-async function createReviewPacket(context, role, requirements) {
+/** @param {Record<string, any>} context @param {string} role @param {string[]} requirements @param {number} reviewRound */
+async function createReviewPacket(context, role, requirements, reviewRound) {
   const artifactNames = [
     ...(
     role === "SPEC_REVIEWER"
@@ -4552,10 +4797,13 @@ async function createReviewPacket(context, role, requirements) {
       sha256: sha256(await readFile(path.join(context.artifactRoot, name))),
     });
   }
+  const codeFingerprint = await applicationCodeFingerprint(context);
   const packet = {
     schemaVersion: 1,
     role,
     readOnly: true,
+    reviewRound,
+    codeFingerprint,
     fixedPoint: context.repository.integrationHead,
     requirements,
     diffFiles: (await changedPaths(context.worktree, context.repository.integrationHead)).filter(
@@ -4565,38 +4813,130 @@ async function createReviewPacket(context, role, requirements) {
   };
   const packetPath = path.join(context.commandGuard.root, `${role.toLowerCase()}-packet.json`);
   await writeJson(packetPath, packet);
-  return { path: packetPath, hash: sha256(await readFile(packetPath)) };
+  return {
+    path: packetPath,
+    hash: sha256(await readFile(packetPath)),
+    codeFingerprint,
+  };
 }
 
-/** @param {string} source @param {string} role @param {string} packetHash @param {string[]} requirements */
-function parseIndependentReview(source, role, packetHash, requirements) {
-  const review = parseJsonOutput(source, role);
-  if (
-    JSON.stringify(Object.keys(review).sort()) !==
-      JSON.stringify(["coverage", "evidence", "packetHash", "schemaVersion", "status", "unverified"]) ||
-    review.schemaVersion !== 1 ||
-    review.status !== "PASS" ||
-    review.packetHash !== packetHash ||
-    !Array.isArray(review.coverage) ||
-    review.coverage.length === 0 ||
-    !review.coverage.every(isSafeEvidenceId) ||
-    JSON.stringify(review.coverage) !== JSON.stringify(requirements) ||
-    !Array.isArray(review.evidence) ||
-    review.evidence.length === 0 ||
-    !review.evidence.every(isSafeEvidenceId) ||
-    !Array.isArray(review.unverified) ||
-    !review.unverified.every(isSafeEvidenceId)
-  ) {
-    throw new Error(`${role} PASS requires a fresh read-only context, coverage, and evidence.`);
+/**
+ * @param {string} source
+ * @param {{
+ *   role: string,
+ *   packetHash: string,
+ *   requirements: string[],
+ *   writeLease: string[],
+ *   contextPaths: string[],
+ *   verificationIds: string[],
+ *   ticketVerificationId: string,
+ *   codeFingerprint: string,
+ *   reviewRound: number,
+ * }} contract
+ */
+function parseIndependentReview(source, contract) {
+  return validateIndependentReview(parseJsonOutput(source, contract.role), contract);
+}
+
+/** @param {"spec" | "quality"} kind @param {number} reviewRound */
+function reviewArtifactName(kind, reviewRound) {
+  return reviewRound === 1
+    ? `${kind}-review.json`
+    : `${kind}-review-${reviewRound}.json`;
+}
+
+/** @param {Record<string, any>} context */
+async function applicationCodeFingerprint(context) {
+  return sha256(JSON.stringify(await leaseFingerprint(context.worktree, context.requestWriteLease)));
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>[]} reviewRounds */
+async function reviewArtifactIntegrity(context, reviewRounds) {
+  let expectedHashes;
+  try {
+    expectedHashes = reviewArtifactHashes(reviewRounds);
+  } catch {
+    return { valid: false, errors: ["review artifact history is invalid"] };
   }
-  return {
-    schemaVersion: 1,
-    status: "PASS",
-    context: { role, fresh: true, readOnly: true, packetHash },
-    coverage: review.coverage,
-    evidence: review.evidence,
-    unverified: review.unverified,
-  };
+  const actualHashes = /** @type {Record<string, string>} */ ({});
+  for (const name of expectedHashes.keys()) {
+    try {
+      actualHashes[name] = sha256(
+        await readFile(path.join(context.artifactRoot, name)),
+      );
+    } catch {
+      actualHashes[name] = "";
+    }
+  }
+  return validateImmutableReviewArtifacts(reviewRounds, actualHashes);
+}
+
+/** @param {Record<string, any>[]} reviewRounds */
+function reviewArtifactHashes(reviewRounds) {
+  const hashes = new Map();
+  for (const [index, round] of reviewRounds.entries()) {
+    const expectedRound = index + 1;
+    const expectedNames = [
+      reviewArtifactName("quality", expectedRound),
+      reviewArtifactName("spec", expectedRound),
+    ].sort();
+    const artifacts = Array.isArray(round?.artifacts) ? round.artifacts : [];
+    const actualNames = artifacts.map((artifact) => artifact?.name).sort();
+    if (
+      round?.round !== expectedRound ||
+      !Array.isArray(round.findings) ||
+      JSON.stringify(actualNames) !== JSON.stringify(expectedNames)
+    ) {
+      throw new Error("Review artifact history is not canonical.");
+    }
+    for (const artifact of artifacts) {
+      if (
+        typeof artifact.sha256 !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(artifact.sha256) ||
+        hashes.has(artifact.name)
+      ) {
+        throw new Error("Review artifact history contains an invalid hash.");
+      }
+      hashes.set(artifact.name, artifact.sha256);
+    }
+  }
+  return hashes;
+}
+
+/** @param {Record<string, any>} graph */
+function graphHasCorrectiveReviewLinks(graph) {
+  return (graph.reviewRounds ?? []).some(
+    (/** @type {any} */ round) => Array.isArray(round.findings) && round.findings.length > 0,
+  );
+}
+
+/** @param {Record<string, any>} graph @param {unknown} value */
+function correctiveWorkMatchesGraph(graph, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const correctiveWork = /** @type {Record<string, any>} */ (value);
+  const expectedRounds = (graph.reviewRounds ?? [])
+    .filter((/** @type {any} */ round) => round.findings.length > 0)
+    .map((/** @type {any} */ round) => ({
+      reviewRound: round.round,
+      sourceArtifacts: round.artifacts.map((/** @type {any} */ artifact) => artifact.name),
+      links: round.findings,
+    }));
+  if (
+    correctiveWork.schemaVersion !== 1 ||
+    correctiveWork.kind !== "REVIEW_CORRECTIONS" ||
+    !["ACTIVE", "COMPLETE"].includes(correctiveWork.status) ||
+    JSON.stringify(correctiveWork.rounds) !== JSON.stringify(expectedRounds)
+  ) {
+    return false;
+  }
+  if (correctiveWork.status === "ACTIVE") {
+    return correctiveWork.completedAfterReviewRound === undefined;
+  }
+  const latestRound = graph.reviewRounds?.at(-1);
+  return latestRound?.findings?.length === 0 &&
+    correctiveWork.completedAfterReviewRound === latestRound.round;
 }
 
 /** @param {string} source @param {string} label */
@@ -4678,7 +5018,7 @@ async function validateRunArtifacts(artifactRoot, expectedArtifacts) {
     throw new Error("Run Artifact set does not match the current state contract.");
   }
   for (const entry of entries) {
-    if (!entry.isFile() || !RUN_ARTIFACT_FILES.has(entry.name)) {
+    if (!entry.isFile() || !isAllowedRunArtifactName(entry.name)) {
       throw new Error(`Run Artifact allowlist rejected ${entry.name}.`);
     }
     const artifact = await readJson(path.join(artifactRoot, entry.name));
@@ -4687,6 +5027,16 @@ async function validateRunArtifacts(artifactRoot, expectedArtifacts) {
     }
     validateArtifactValue(artifact, entry.name);
   }
+}
+
+/** @param {string} name */
+function isAllowedRunArtifactName(name) {
+  return RUN_ARTIFACT_FILES.has(name) || isVersionedReviewArtifactName(name);
+}
+
+/** @param {string} name */
+function isVersionedReviewArtifactName(name) {
+  return /^(?:spec|quality)-review-(?:[2-9]|[1-9][0-9]+)\.json$/u.test(name);
 }
 
 /** @param {string} worktree @param {string} revision @param {string} artifactPath @param {Record<string, unknown>} expectedArtifacts */

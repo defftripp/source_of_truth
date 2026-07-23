@@ -30,7 +30,29 @@ const slices = {
     source: 'export const punctuation = "!";\n',
   },
 };
-const slice = slices[/** @type {keyof typeof slices} */ (packet.ticketId)];
+const corrections = {
+  "FINDING-1": {
+    lease: ["src/message.mjs"],
+    context: ["src/message.mjs", "test/message.test.mjs"],
+    path: "src/message.mjs",
+    source: 'export const message = "hello from STANDARD";\n// review correction: FINDING-1\n',
+  },
+  "FINDING-A": {
+    lease: ["src/message.mjs"],
+    context: ["src/message.mjs", "test/message.test.mjs"],
+    path: "src/message.mjs",
+    source: 'export const message = "hello from STANDARD";\n// review correction: FINDING-A\n',
+  },
+  "FINDING-B": {
+    lease: ["src/audience.mjs"],
+    context: ["src/audience.mjs", "test/audience.test.mjs"],
+    path: "src/audience.mjs",
+    source: 'export const audience = "engineers";\n// review correction: FINDING-B\n',
+  },
+};
+const slice = packet.sourceFinding
+  ? corrections[/** @type {keyof typeof corrections} */ (packet.sourceFinding.id)]
+  : slices[/** @type {keyof typeof slices} */ (packet.ticketId)];
 assert.ok(slice, `Unexpected ticket ${packet.ticketId}`);
 assert.deepEqual(packet.writeLease, slice.lease);
 assert.deepEqual(packet.contextPaths, slice.context);

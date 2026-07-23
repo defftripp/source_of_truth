@@ -24,6 +24,7 @@ export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering/runtime/methodology.md",
   ".engineering/runtime/mode-policy.mjs",
   ".engineering/runtime/parallel-eligibility.mjs",
+  ".engineering/runtime/review-contracts.mjs",
   ".engineering/runtime/upstream-adoption.json",
   ".engineering/specs",
   ".engineering/specs/.gitkeep",
@@ -89,6 +90,7 @@ async function canonicalShellFileContent(projectPath) {
       "runtime/methodology.md",
       "runtime/mode-policy.mjs",
       "runtime/parallel-eligibility.mjs",
+      "runtime/review-contracts.mjs",
       "runtime/upstream-adoption.json",
     ];
     const files = [];

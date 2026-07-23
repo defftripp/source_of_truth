@@ -52,10 +52,26 @@ and non-terminal report contract. Remote sync retains its compatible blocker and
 sync evidence fields while exposing the same single-question structure.
 
 Once the graph is complete, Root executes Spec Review and Quality Review in
-separate fresh read-only contexts, runs the full relevant instrumental checks,
-and rejects evidence if any ticket's leased tree has changed since its targeted
-verification. A successful run creates a terminal evidence commit on the
-isolated Run Branch and stops at READY_FOR_HUMAN.
+separate fresh read-only contexts with different role packets. Every result
+must declare complete requirement coverage, concrete evidence, unverified
+areas, and blocking findings; a generic or empty PASS is invalid. Tests,
+typecheck, build, and observed behavior always outrank reviewer verdicts.
+
+Each blocking finding is mapped one-to-one to a bounded corrective Execution
+Ticket containing its immutable source finding, blockers, Write Lease, context,
+and targeted verification contract. Root appends those tickets to the same
+durable graph and executes them through the existing deterministic frontier,
+Worker, targeted verification, and checkpoint lifecycle. Corrections carry no
+parallel proof by default, so DEEP serializes them unless the guarded
+eligibility contract independently proves disjoint leases, contracts, and
+worktrees. Original review artifacts remain byte-identical; graph review
+history links every finding to its corrective ticket.
+
+After the last correction, Root runs fresh Spec and Quality reviews again, then
+runs every full relevant instrumental check. Review and verification code
+fingerprints must both match the final Application Core after the last
+checkpoint; stale evidence is BLOCKED. A successful run creates a terminal
+evidence commit on the isolated Run Branch and stops at READY_FOR_HUMAN.
 
 DEEP is a hard floor for security, payments, destructive migrations, and other
 explicitly hard-to-reverse profiles. It extends this same planned-run state

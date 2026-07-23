@@ -153,9 +153,28 @@ commits, then advances to the next frontier without another chat. A repeated
 invocation with the same request resumes a non-terminal Run Branch/worktree,
 validates its durable request binding and checkpoint, discards the partial
 unverified slice, and retries the first admissible ticket. After the graph is
-complete, independent Spec and Quality reviews run in fresh read-only processes,
-every selected instrumental check completes, and any lease drift since targeted
-verification blocks readiness.
+complete, independent Spec and Quality reviews run in fresh read-only processes
+with distinct role packets. Both results must contain exact coverage, evidence,
+unverified areas, and an explicit blocking-finding list; an empty or generic
+PASS is rejected.
+
+Each blocking finding becomes exactly one bounded corrective Execution Ticket
+in the existing `ticket-graph.json`. The ticket records its immutable source
+finding, blockers, Write Lease, context, and targeted verification contract.
+Root executes corrections through the same deterministic frontier, Worker,
+targeted verification, durable checkpoint, and resume machinery. No corrective
+executor exists. Corrections are sequential unless DEEP's existing guarded
+eligibility proof establishes disjoint leases, contracts, and worktrees.
+`corrective-work.json` and graph review history preserve finding-to-ticket
+links, while numbered rerun artifacts leave the original Spec and Quality
+artifacts byte-identical.
+
+After the last correction, both reviews run again before full relevant
+instrumental verification. Final review and verification fingerprints must
+match the last Application Core code state, and every ticket's non-superseded
+lease must still match its targeted evidence. Failing tests, typecheck, build,
+or observed behavior override a positive reviewer verdict. Missing reruns,
+stale evidence, or any instrumental failure blocks readiness.
 
 Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
 

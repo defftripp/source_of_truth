@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Convert every blocking Spec or Quality review finding into one bounded
+  corrective Execution Ticket linked in the existing durable graph, then run
+  those tickets blockers-first through the shared Worker, targeted
+  verification, and Root checkpoint lifecycle.
+- Preserve original review artifacts byte-for-byte, publish numbered fresh
+  reruns after corrections, reject generic PASS results, and require coverage,
+  evidence, unverified areas, and bounded finding contracts from independent
+  role contexts.
+- Require fresh review and full relevant verification fingerprints after the
+  last code change; instrumental failures and stale evidence remain BLOCKED and
+  cannot reach READY_FOR_HUMAN.
 - Guard DEEP parallelism with a dedicated validator that requires pairwise
   disjoint Write Leases, declared contract IDs, and Worker worktrees; serialize
   any overlapping or unproven frontier.

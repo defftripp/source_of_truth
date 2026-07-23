@@ -19,4 +19,5 @@ process.stdout.write(JSON.stringify({
   coverage: packet.requirements,
   evidence: ["artifact-hashes", "fixed-point", "diff-reviewed"],
   unverified: [],
+  findings: [],
 }));
