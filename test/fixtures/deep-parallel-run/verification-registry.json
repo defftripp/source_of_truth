@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "checks": [
+    { "id": "prepared-project-smoke", "role": "smoke", "command": ["node", ".engineering/runtime/engine.mjs", "--smoke"] },
+    { "id": "repository-research", "role": "research", "command": ["node", "scripts/research.mjs"] },
+    { "id": "disjoint-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "disjoint"] },
+    { "id": "overlapping-lease-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "overlapping-lease"] },
+    { "id": "overlapping-contract-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "overlapping-contract"] },
+    { "id": "new-path-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "new-path"] },
+    { "id": "mutating-targeted-planner", "role": "planner", "command": ["node", "scripts/planner.mjs", "mutating-targeted"] },
+    { "id": "advisor-gate", "role": "advisor", "command": ["node", "scripts/advisor.mjs"] },
+    { "id": "bounded-worker", "role": "worker", "command": ["node", "scripts/worker.mjs", "bounded"] },
+    { "id": "forbidden-worker", "role": "worker", "command": ["node", "scripts/worker.mjs", "forbidden"] },
+    { "id": "conflicting-worker", "role": "worker", "command": ["node", "scripts/worker.mjs", "conflicting"] },
+    { "id": "ticket-test", "role": "ticket-verification", "command": ["node", "scripts/ticket-verification.mjs"] },
+    { "id": "mutating-ticket-test", "role": "ticket-verification", "command": ["node", "scripts/ticket-verification.mjs", "mutate-pending"] },
+    { "id": "spec-review", "role": "spec-review", "command": ["node", "scripts/review.mjs", "SPEC_REVIEWER"] },
+    { "id": "quality-review", "role": "quality-review", "command": ["node", "scripts/review.mjs", "QUALITY_REVIEWER"] },
+    { "id": "full-test", "role": "test", "requiredForFast": false, "command": ["node", "--test", "test/parallel.test.mjs"] },
+    { "id": "overlap-full-test", "role": "test", "requiredForFast": false, "command": ["node", "scripts/full-overlap.mjs"] },
+    { "id": "typecheck", "role": "typecheck", "requiredForFast": false, "command": ["node", "--check", "src/a.mjs"] },
+    { "id": "build", "role": "build", "requiredForFast": false, "command": ["node", "scripts/build.mjs"] },
+    { "id": "observed-behavior", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/observe.mjs"] },
+    { "id": "observed-overlap", "role": "observed-behavior", "requiredForFast": false, "command": ["node", "scripts/full-overlap.mjs"] }
+  ]
+}

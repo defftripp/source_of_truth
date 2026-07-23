@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Recover a new untracked path after forbidden Worker Git",
+    "scope": "LOCAL",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/new.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "A forbidden Worker cannot leave a new path behind.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-NEW-PATH-RECOVERY",
+        "interface": "The Root recovery boundary for a new leased path.",
+        "verificationIds": ["ticket-test"]
+      }
+    ],
+    "contextPaths": ["src/new.mjs", "test/parallel.test.mjs"],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "new-path-planner",
+    "advisor": "advisor-gate",
+    "worker": "forbidden-worker",
+    "ticketVerification": "ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

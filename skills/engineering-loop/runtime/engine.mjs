@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -17,6 +17,7 @@ import {
   validateDeepPlanContract,
   validateDeepResearchContract,
 } from "./deep-contracts.mjs";
+import { evaluateDeepParallelEligibility } from "./parallel-eligibility.mjs";
 
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
@@ -25,12 +26,14 @@ const INSTRUMENTAL_ROLES = Object.freeze(["test", "typecheck", "build", "observe
 const RUN_ARTIFACT_FILES = new Set([
   "advisor.json",
   "context-packet.json",
+  "corrective-work.json",
   "domain-decisions.json",
   "domain-model.json",
   "human-gate.json",
   "manifest-approval.json",
   "migration-contract.json",
   "migration-manifest.json",
+  "parallel-execution.json",
   "quality-review.json",
   "remote-sync.json",
   "research.json",
@@ -772,6 +775,7 @@ async function runStandardTask(target, prepared, request) {
     checkpointCommits,
     blocker: blockStandardRun,
     requestHash,
+    parallelWorkerRoots: [],
     remoteSync: mode === "STANDARD"
       ? resumeRemoteSyncState(request, branch, resumable, checkpointCommits)
       : { schemaVersion: 1, enabled: false, branch },
@@ -1131,6 +1135,17 @@ async function runStandardTask(target, prepared, request) {
       }
     }
 
+    const parallelExecution = mode === "DEEP"
+      ? artifacts["parallel-execution.json"] ?? { schemaVersion: 1, batches: [] }
+      : null;
+    if (parallelExecution) {
+      artifacts["parallel-execution.json"] = parallelExecution;
+    }
+    /** @type {Map<string, Record<string, any>>} */
+    const pendingParallelResults = new Map();
+    /** @type {Record<string, any> | null} */
+    let activeExecutionBatch = null;
+
     while (ticketGraph.tickets.some((/** @type {any} */ ticket) => ticket.status !== "COMPLETE")) {
       const frontier = selectDeterministicFrontier(
         ticketGraph.tickets,
@@ -1143,11 +1158,90 @@ async function runStandardTask(target, prepared, request) {
       if (frontier.length === 0) {
         return blockStandardSchema(context, "IMPLEMENTING", "ticket-frontier");
       }
+      if (mode === "DEEP" && pendingParallelResults.size === 0) {
+        const candidateClaims = frontier.map((candidate) => ({
+          ticketId: candidate.id,
+          writeLease: candidate.writeLease,
+          contractIds: candidate.contractIds ?? [],
+          worktree: path.join(worktreeRoot, `${runId}-workers`, candidate.id),
+        }));
+        const eligibility = evaluateDeepParallelEligibility(candidateClaims);
+        activeExecutionBatch = {
+          id: `BATCH-${parallelExecution.batches.length + 1}`,
+          execution: eligibility.execution,
+          candidateTicketIds: frontier.map((candidate) => candidate.id),
+          ticketIds: eligibility.eligible
+            ? frontier.map((candidate) => candidate.id)
+            : [frontier[0].id],
+          reasons: eligibility.reasons,
+          workers: [],
+          integrations: [],
+        };
+        parallelExecution.batches.push(activeExecutionBatch);
+        if (eligibility.eligible) {
+          for (const candidate of frontier) {
+            candidate.status = "IN_PROGRESS";
+            candidate.attempts += 1;
+          }
+          context.workerCount += frontier.length;
+          const parallelBatch = await executeParallelWorkerBatch(
+            context,
+            commands,
+            frontier,
+            request,
+            specLite,
+            restoredFromRemote,
+            candidateClaims,
+            activeExecutionBatch,
+          );
+          if (parallelBatch.failure) {
+            return blockCorrectiveWorkerResult(
+              context,
+              frontier.map((candidate) => candidate.id),
+              parallelBatch.failure.checkId,
+              parallelBatch.failure.detail,
+            );
+          }
+          const batchPreflight = await validateParallelResultsAgainstAcceptedState(
+            context,
+            parallelBatch.results,
+          );
+          if (!batchPreflight.valid) {
+            for (const workerResult of parallelBatch.results) {
+              await restorePathsToCommit(
+                worktree,
+                workerResult.baseCommit,
+                workerResult.ticket.writeLease,
+              );
+            }
+            return blockCorrectiveWorkerResult(
+              context,
+              frontier.map((candidate) => candidate.id),
+              batchPreflight.checkId ?? "worker-result-divergence",
+              batchPreflight.detail ?? "Parallel batch diverged before Root acceptance.",
+            );
+          }
+          for (const result of parallelBatch.results) {
+            if (!result) {
+              return blockCorrectiveWorkerResult(
+                context,
+                frontier.map((candidate) => candidate.id),
+                "worker-result-conflict",
+                "Parallel Worker batch omitted a declared result.",
+              );
+            }
+            pendingParallelResults.set(result.ticket.id, result);
+          }
+        }
+      }
       const ticket = frontier[0];
-      ticket.status = "IN_PROGRESS";
-      ticket.attempts += 1;
+      const parallelResult = pendingParallelResults.get(ticket.id);
+      if (!parallelResult) {
+        ticket.status = "IN_PROGRESS";
+        ticket.attempts += 1;
+        context.workerCount += 1;
+      }
       context.writeLease = ticket.writeLease;
-      context.workerCount += 1;
       const ticketArtifact = {
         schemaVersion: 1,
         id: ticket.id,
@@ -1156,24 +1250,17 @@ async function runStandardTask(target, prepared, request) {
         verificationIds: ticket.verificationIds,
         dependencies: ticket.dependencies,
         writeLease: ticket.writeLease,
+        ...(ticket.contractIds ? { contractIds: ticket.contractIds } : {}),
         contextPaths: ticket.contextPaths,
       };
       artifacts["ticket.json"] = ticketArtifact;
-      const contextPacket = {
-        schemaVersion: 1,
-        ticketId: ticket.id,
-        attempt: ticket.attempts,
-        taskSummary: request.task.summary,
-        factIds: specLite.evidenceBackedFacts,
-        acceptanceCriteria: ticket.acceptanceCriteria,
-        verificationIds: ticket.verificationIds,
-        contextPaths: ticket.contextPaths,
-        writeLease: ticket.writeLease,
-        resumedFromRemote: restoredFromRemote,
-        rootWriter: false,
-        workerMayCommit: false,
-        workerMaySpawnSubagents: false,
-      };
+      const contextPacket = createWorkerContextPacket(
+        ticket,
+        request,
+        specLite,
+        restoredFromRemote,
+        parallelResult?.worktree ?? worktree,
+      );
       artifacts["context-packet.json"] = contextPacket;
       const contextPacketPath = path.join(artifactRoot, "context-packet.json");
       await Promise.all([
@@ -1196,13 +1283,50 @@ async function runStandardTask(target, prepared, request) {
       const preWorkerChanges = new Map(
         (await workingTreeFingerprint(worktree, ticketBase)).map((entry) => [entry.path, entry.hash]),
       );
-      const workerExecution = await executeRunCommand(context, commands.worker, undefined, {
-        ENGINEERING_CONTEXT_PACKET: contextPacketPath,
-        ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
-        ENGINEERING_WORKER_MAY_COMMIT: "0",
-        ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
-      });
+      let workerExecution;
+      if (parallelResult) {
+        const integration = await integrateIsolatedWorkerResult(context, parallelResult);
+        if (!integration.valid) {
+          await restorePathsToCommit(worktree, ticketBase, ticket.writeLease);
+          return blockCorrectiveWorkerResult(
+            context,
+            [ticket.id],
+            integration.checkId ?? "worker-result-conflict",
+            integration.detail ?? `Worker result ${ticket.id} could not be accepted.`,
+          );
+        }
+        workerExecution = { result: parallelResult.commandResult, blocked: null };
+      } else {
+        const startedAtEpochMs = Date.now();
+        workerExecution = await executeRunCommand(context, commands.worker, undefined, {
+          ENGINEERING_CONTEXT_PACKET: contextPacketPath,
+          ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
+          ENGINEERING_WORKER_MAY_COMMIT: "0",
+          ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
+        });
+        const endedAtEpochMs = Date.now();
+        if (activeExecutionBatch) {
+          activeExecutionBatch.workers.push({
+            ticketId: ticket.id,
+            worktree,
+            startedAtEpochMs,
+            endedAtEpochMs,
+            status: workerExecution.blocked || workerExecution.result.exitCode !== 0
+              ? "BLOCKED"
+              : "COMPLETE",
+          });
+        }
+      }
       if (workerExecution.blocked) {
+        if (mode === "DEEP") {
+          await restorePathsToCommit(worktree, ticketBase, ticket.writeLease);
+          return blockCorrectiveWorkerResult(
+            context,
+            [ticket.id],
+            workerExecution.blocked.failure?.checkId ?? "worker-authority",
+            "Worker attempted a forbidden commit or integration action.",
+          );
+        }
         return workerExecution.blocked;
       }
       if (workerExecution.result.exitCode !== 0) {
@@ -1222,7 +1346,13 @@ async function runStandardTask(target, prepared, request) {
       } catch {
         return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
       }
-      verification.checks.push({ ...workerVerification, ticketId: ticket.id, attempt: ticket.attempts });
+      verification.checks.push({
+        ...workerVerification,
+        ticketId: ticket.id,
+        attempt: ticket.attempts,
+        phase: "WORKER_SELF_CHECK",
+        sequence: verification.checks.length + 1,
+      });
       const workerChanges = (await workingTreeFingerprint(worktree, ticketBase))
         .filter((entry) => preWorkerChanges.get(entry.path) !== entry.hash)
         .map((entry) => entry.path);
@@ -1231,6 +1361,19 @@ async function runStandardTask(target, prepared, request) {
           !ticket.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
       );
       if (workerScopeLeak) {
+        if (mode === "DEEP") {
+          await restorePathsToCommit(
+            worktree,
+            ticketBase,
+            workerChanges.filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`)),
+          );
+          return blockCorrectiveWorkerResult(
+            context,
+            [ticket.id],
+            "worker-result-conflict",
+            `Worker result escaped its Write Lease at ${workerScopeLeak}.`,
+          );
+        }
         return blockStandardSchema(context, "IMPLEMENTING", "write-lease");
       }
       if (!workerChanges.some((changedPath) => ticket.writeLease.includes(changedPath))) {
@@ -1247,10 +1390,36 @@ async function runStandardTask(target, prepared, request) {
       if (ticketExecution.blocked) {
         return ticketExecution.blocked;
       }
+      const pendingPreflight = await validateParallelResultsAgainstAcceptedState(
+        context,
+        [...pendingParallelResults.values()].filter(
+          (result) => result.ticket.id !== ticket.id,
+        ),
+      );
+      if (!pendingPreflight.valid) {
+        await restorePathsToCommit(worktree, ticketBase, ticket.writeLease);
+        for (const pendingResult of pendingParallelResults.values()) {
+          if (pendingResult.ticket.id !== ticket.id) {
+            await restorePathsToCommit(
+              worktree,
+              pendingResult.baseCommit,
+              pendingResult.ticket.writeLease,
+            );
+          }
+        }
+        return blockCorrectiveWorkerResult(
+          context,
+          [...pendingParallelResults.keys()],
+          pendingPreflight.checkId ?? "worker-result-divergence",
+          pendingPreflight.detail ?? "Pending Worker result diverged before checkpoint.",
+        );
+      }
       const ticketEvidence = {
         ...commandEvidence(commands.ticketVerification, ticketExecution.result),
         ticketId: ticket.id,
         attempt: ticket.attempts,
+        phase: "TARGETED_VERIFICATION",
+        sequence: verification.checks.length + 1,
         verifiedAtEpochSeconds: Math.floor(Date.now() / 1000),
         observedLease: await leaseFingerprint(worktree, ticket.writeLease),
       };
@@ -1273,6 +1442,19 @@ async function runStandardTask(target, prepared, request) {
       }
 
       transitionState(stateHistory, "CHECKPOINT");
+      const checkpointIntegration = activeExecutionBatch
+        ? {
+            sequence: ticketGraph.executionOrder.length + 1,
+            ticketId: ticket.id,
+            targetedVerificationId: commands.ticketVerification.id,
+            targetedVerificationStatus: ticketEvidence.status,
+            checkpointCommit: null,
+            state: "CHECKPOINT_PENDING",
+          }
+        : null;
+      if (activeExecutionBatch && checkpointIntegration) {
+        activeExecutionBatch.integrations.push(checkpointIntegration);
+      }
       const checkpointArtifacts = {
         ...artifacts,
         "state.json": runStateArtifact(
@@ -1297,6 +1479,12 @@ async function runStandardTask(target, prepared, request) {
       await validateGitArtifacts(worktree, "index", artifactPath, checkpointArtifacts);
       await validateLeasedIndex(worktree, ticket.writeLease);
       const checkpointTree = await git(worktree, ["write-tree"]);
+      if (
+        process.env.NODE_ENV === "test" &&
+        process.env.ENGINEERING_TEST_FAIL_BEFORE_CHECKPOINT_COMMIT === ticket.id
+      ) {
+        throw new Error(`Test fault before checkpoint commit for ${ticket.id}.`);
+      }
       await git(worktree, [
         "-c",
         `core.hooksPath=${commandGuard.emptyHooks}`,
@@ -1307,14 +1495,32 @@ async function runStandardTask(target, prepared, request) {
       const checkpointCommit = await git(worktree, ["rev-parse", "HEAD"]);
       await validateCommittedTree(worktree, checkpointCommit, checkpointTree);
       await validateGitArtifacts(worktree, checkpointCommit, artifactPath, checkpointArtifacts);
+      if (
+        process.env.NODE_ENV === "test" &&
+        process.env.ENGINEERING_TEST_FAIL_AFTER_CHECKPOINT_COMMIT === ticket.id
+      ) {
+        throw new Error(`Test fault after checkpoint commit for ${ticket.id}.`);
+      }
       ticket.status = "COMPLETE";
       ticket.checkpointCommit = checkpointCommit;
       ticket.checkpointedAt = await git(worktree, ["show", "-s", "--format=%cI", checkpointCommit]);
       ticketGraph.executionOrder.push(ticket.id);
       context.checkpointCommits.push(checkpointCommit);
+      if (activeExecutionBatch && checkpointIntegration) {
+        checkpointIntegration.checkpointCommit = checkpointCommit;
+        checkpointIntegration.state = "CHECKPOINTED";
+        pendingParallelResults.delete(ticket.id);
+        if (pendingParallelResults.size === 0) {
+          await cleanupParallelWorkerRoots(context);
+          activeExecutionBatch = null;
+        }
+      }
       artifacts["ticket-graph.json"] = ticketGraph;
       await Promise.all([
         writeJson(path.join(artifactRoot, "ticket-graph.json"), ticketGraph),
+        ...(parallelExecution
+          ? [writeJson(path.join(artifactRoot, "parallel-execution.json"), parallelExecution)]
+          : []),
         writeRunState(
           artifactRoot,
           runId,
@@ -1360,7 +1566,12 @@ async function runStandardTask(target, prepared, request) {
     await writeJson(path.join(artifactRoot, "spec-review.json"), specReview);
 
     transitionState(stateHistory, "QUALITY_REVIEW");
-    const qualityRequirements = ["write-lease", "worker-contract", "verification-freshness"];
+    const qualityRequirements = [
+      "write-lease",
+      "worker-contract",
+      "verification-freshness",
+      ...(mode === "DEEP" ? ["parallel-eligibility", "root-integration"] : []),
+    ];
     const qualityReviewPacket = await createReviewPacket(
       context,
       "QUALITY_REVIEWER",
@@ -1395,21 +1606,51 @@ async function runStandardTask(target, prepared, request) {
     await writeJson(path.join(artifactRoot, "quality-review.json"), qualityReview);
 
     transitionState(stateHistory, "FULL_VERIFICATION");
+    if (parallelExecution) {
+      parallelExecution.fullVerification = {
+        afterIntegrationCount: ticketGraph.executionOrder.length,
+        startedAtEpochMs: Date.now(),
+        checkIds: commands.relevantChecks.map((command) => command.id),
+        status: "RUNNING",
+      };
+    }
     for (const command of commands.relevantChecks) {
       const execution = await executeRunCommand(context, command, qualityReview);
       if (execution.blocked) {
         return execution.blocked;
       }
-      verification.checks.push(commandEvidence(command, execution.result));
+      verification.checks.push({
+        ...commandEvidence(command, execution.result),
+        phase: "FULL_VERIFICATION",
+        sequence: verification.checks.length + 1,
+      });
       await writeJson(path.join(artifactRoot, "verification.json"), verification);
       if (execution.result.exitCode !== 0) {
         return blockStandardAfterCommand(context, "FULL_VERIFICATION", command, execution.result);
       }
     }
+    if (parallelExecution) {
+      parallelExecution.fullVerification.status = "PASS";
+      parallelExecution.fullVerification.endedAtEpochMs = Date.now();
+    }
     for (const ticket of ticketGraph.tickets) {
+      const executionIndex = ticketGraph.executionOrder.indexOf(ticket.id);
+      const supersededPaths = new Set(
+        ticketGraph.executionOrder
+          .slice(executionIndex + 1)
+          .flatMap((/** @type {string} */ ticketId) =>
+            ticketGraph.tickets.find((/** @type {any} */ candidate) => candidate.id === ticketId)
+              ?.writeLease ?? []
+          ),
+      );
+      const observedLease = (ticket.verification?.observedLease ?? []).filter(
+        (/** @type {{ path: string }} */ entry) => !supersededPaths.has(entry.path),
+      );
+      const currentLease = (await leaseFingerprint(worktree, ticket.writeLease)).filter(
+        (entry) => !supersededPaths.has(entry.path),
+      );
       if (
-        JSON.stringify(ticket.verification?.observedLease) !==
-        JSON.stringify(await leaseFingerprint(worktree, ticket.writeLease))
+        JSON.stringify(observedLease) !== JSON.stringify(currentLease)
       ) {
         return blockStandardSchema(context, "FULL_VERIFICATION", "verification-freshness");
       }
@@ -1536,7 +1777,422 @@ async function runStandardTask(target, prepared, request) {
       aggregateDiff: await aggregateDiff(worktree, repository.integrationHead, head),
     };
   } finally {
-    await cleanupCommandGuard(commandGuard);
+    try {
+      await cleanupParallelWorkerRoots(context);
+    } finally {
+      await cleanupCommandGuard(commandGuard);
+    }
+  }
+}
+
+/**
+ * @param {Record<string, any>} ticket
+ * @param {Record<string, any>} request
+ * @param {Record<string, any>} specLite
+ * @param {boolean} restoredFromRemote
+ * @param {string} workerWorktree
+ */
+function createWorkerContextPacket(ticket, request, specLite, restoredFromRemote, workerWorktree) {
+  return {
+    schemaVersion: 1,
+    ticketId: ticket.id,
+    attempt: ticket.attempts,
+    taskSummary: request.task.summary,
+    factIds: specLite.evidenceBackedFacts,
+    acceptanceCriteria: ticket.acceptanceCriteria,
+    verificationIds: ticket.verificationIds,
+    contextPaths: ticket.contextPaths,
+    writeLease: ticket.writeLease,
+    ...(ticket.contractIds ? { contractIds: ticket.contractIds } : {}),
+    workerWorktree,
+    resumedFromRemote: restoredFromRemote,
+    rootWriter: false,
+    workerMayCommit: false,
+    workerMaySpawnSubagents: false,
+  };
+}
+
+/**
+ * @param {Record<string, any>} context
+ * @param {Record<string, any>} commands
+ * @param {Record<string, any>[]} tickets
+ * @param {Record<string, any>} request
+ * @param {Record<string, any>} specLite
+ * @param {boolean} restoredFromRemote
+ * @param {Record<string, any>[]} claims
+ * @param {Record<string, any>} batch
+ * @returns {Promise<any>}
+ */
+async function executeParallelWorkerBatch(
+  context,
+  commands,
+  tickets,
+  request,
+  specLite,
+  restoredFromRemote,
+  claims,
+  batch,
+) {
+  const ticketBase = await git(context.worktree, ["rev-parse", "HEAD"]);
+  const executions = [];
+  for (const ticket of tickets) {
+    const claim = claims.find((candidate) => candidate.ticketId === ticket.id);
+    if (!claim) {
+      return {
+        results: [],
+        failure: { checkId: "parallel-eligibility", detail: `Missing Worker claim for ${ticket.id}.` },
+      };
+    }
+    await mkdir(path.dirname(claim.worktree), { recursive: true });
+    await removeWorkerWorktree(context.target, claim.worktree);
+    await git(context.target, ["worktree", "add", "--detach", claim.worktree, ticketBase]);
+    context.parallelWorkerRoots.push(claim.worktree);
+    const guard = await createGitCommandGuard(
+      path.dirname(path.dirname(claim.worktree)),
+      `w-${context.runId.slice(-8)}-${ticket.id}`,
+      context.target,
+    );
+    await initializeCommandGuard(guard, claim.worktree, context.repository, context.branch);
+    const packet = createWorkerContextPacket(
+      ticket,
+      request,
+      specLite,
+      restoredFromRemote,
+      claim.worktree,
+    );
+    const packetPath = path.join(guard.root, "context-packet.json");
+    await writeJson(packetPath, packet);
+    const baseLease = await leaseFingerprint(claim.worktree, ticket.writeLease);
+    executions.push((async () => {
+      const startedAtEpochMs = Date.now();
+      try {
+        const workerContext = {
+          ...context,
+          worktree: claim.worktree,
+          commandGuard: guard,
+          blocker: async (/** @type {Record<string, any>} */ blockedContext) => ({
+            failure: blockedContext.failure,
+          }),
+        };
+        const execution = await executeRunCommand(workerContext, commands.worker, undefined, {
+          ENGINEERING_CONTEXT_PACKET: packetPath,
+          ENGINEERING_TICKET_VERIFICATION: JSON.stringify(commands.ticketVerification.command),
+          ENGINEERING_WORKER_MAY_COMMIT: "0",
+          ENGINEERING_WORKER_MAY_SPAWN_SUBAGENTS: "0",
+        });
+        const endedAtEpochMs = Date.now();
+        const timeline = {
+          ticketId: ticket.id,
+          worktree: claim.worktree,
+          startedAtEpochMs,
+          endedAtEpochMs,
+          status: "COMPLETE",
+        };
+        if (execution.blocked) {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: execution.blocked.failure?.checkId ?? "worker-authority",
+              detail: `Worker ${ticket.id} attempted a forbidden commit or integration action.`,
+            },
+          };
+        }
+        if (execution.result.exitCode !== 0) {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: commands.worker.id,
+              detail: `Worker ${ticket.id} exited with ${execution.result.exitCode}.`,
+            },
+          };
+        }
+        try {
+          parseWorkerVerification(execution.result.stdout, commands.ticketVerification.id);
+        } catch {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: "worker-contract",
+              detail: `Worker ${ticket.id} returned an invalid result contract.`,
+            },
+          };
+        }
+        const workerHead = await git(claim.worktree, ["rev-parse", "HEAD"]);
+        if (workerHead !== ticketBase) {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: "worker-authority",
+              detail: `Worker ${ticket.id} changed its Git HEAD.`,
+            },
+          };
+        }
+        const changedPaths = (await workingTreeFingerprint(claim.worktree, ticketBase))
+          .map((entry) => entry.path);
+        const escapedPath = changedPaths.find(
+          (changedPath) => !ticket.writeLease.includes(changedPath),
+        );
+        if (escapedPath) {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: "worker-result-conflict",
+              detail: `Worker ${ticket.id} escaped its Write Lease at ${escapedPath}.`,
+            },
+          };
+        }
+        if (!changedPaths.some((changedPath) => ticket.writeLease.includes(changedPath))) {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: "vertical-ticket-change",
+              detail: `Worker ${ticket.id} produced no leased change.`,
+            },
+          };
+        }
+        return {
+          timeline,
+          result: {
+            ticket,
+            worktree: claim.worktree,
+            baseCommit: ticketBase,
+            baseLease,
+            changedPaths,
+            resultLease: await leaseFingerprint(claim.worktree, ticket.writeLease),
+            commandResult: execution.result,
+          },
+        };
+      } finally {
+        await cleanupCommandGuard(guard);
+      }
+    })());
+  }
+  const settled = await Promise.all(executions);
+  batch.workers = settled.map((entry) => entry.timeline).sort(
+    (left, right) => compareEvidenceIds(left.ticketId, right.ticketId),
+  );
+  const failed = settled.find((entry) => entry.failure);
+  if (failed) {
+    return { results: [], failure: failed.failure };
+  }
+  /** @type {Record<string, any>[]} */
+  const results = [];
+  for (const entry of settled) {
+    if (entry.result) {
+      results.push(entry.result);
+    }
+  }
+  results.sort((left, right) => compareEvidenceIds(left.ticket.id, right.ticket.id));
+  return { results, failure: null };
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>[]} workerResults */
+async function validateParallelResultsAgainstAcceptedState(context, workerResults) {
+  for (const workerResult of workerResults) {
+    const acceptedLease = await leaseFingerprint(
+      context.worktree,
+      workerResult.ticket.writeLease,
+    );
+    if (JSON.stringify(acceptedLease) !== JSON.stringify(workerResult.baseLease)) {
+      return {
+        valid: false,
+        checkId: "worker-result-divergence",
+        detail: `Accepted integration state diverged before batch acceptance of ${workerResult.ticket.id}.`,
+      };
+    }
+  }
+  return { valid: true, checkId: null, detail: null };
+}
+
+/** @param {Record<string, any>} context @param {Record<string, any>} workerResult */
+async function integrateIsolatedWorkerResult(context, workerResult) {
+  const acceptedLease = await leaseFingerprint(context.worktree, workerResult.ticket.writeLease);
+  if (JSON.stringify(acceptedLease) !== JSON.stringify(workerResult.baseLease)) {
+    return {
+      valid: false,
+      checkId: "worker-result-divergence",
+      detail: `Accepted integration state diverged before ${workerResult.ticket.id}.`,
+    };
+  }
+  try {
+    for (const projectPath of workerResult.changedPaths) {
+      const source = path.join(workerResult.worktree, ...projectPath.split("/"));
+      const destination = path.join(context.worktree, ...projectPath.split("/"));
+      const content = await tryReadBuffer(source);
+      if (content === null) {
+        await rm(destination, { force: true });
+      } else {
+        await mkdir(path.dirname(destination), { recursive: true });
+        await writeFile(destination, content);
+      }
+    }
+  } catch {
+    await restorePathsToCommit(
+      context.worktree,
+      workerResult.baseCommit,
+      workerResult.changedPaths,
+    );
+    return {
+      valid: false,
+      checkId: "worker-result-conflict",
+      detail: `Worker result ${workerResult.ticket.id} could not be integrated exactly.`,
+    };
+  }
+  const integratedLease = await leaseFingerprint(context.worktree, workerResult.ticket.writeLease);
+  if (JSON.stringify(integratedLease) !== JSON.stringify(workerResult.resultLease)) {
+    await restorePathsToCommit(
+      context.worktree,
+      workerResult.baseCommit,
+      workerResult.changedPaths,
+    );
+    return {
+      valid: false,
+      checkId: "worker-result-conflict",
+      detail: `Worker result ${workerResult.ticket.id} changed during Root integration.`,
+    };
+  }
+  return { valid: true, checkId: null, detail: null };
+}
+
+/**
+ * @param {Record<string, any>} context
+ * @param {string[]} ticketIds
+ * @param {string} checkId
+ * @param {string} detail
+ */
+async function blockCorrectiveWorkerResult(context, ticketIds, checkId, detail) {
+  const acceptedHead = await git(context.worktree, ["rev-parse", "HEAD"]);
+  context.artifacts["corrective-work.json"] = {
+    schemaVersion: 1,
+    kind: "CORRECTIVE_WORK",
+    status: "BLOCKED",
+    sourceTicketIds: [...ticketIds].sort(compareEvidenceIds),
+    reason: { checkId, detail },
+    silentMerge: false,
+    acceptedIntegration: {
+      head: acceptedHead,
+      changed: false,
+    },
+  };
+  return blockStandardSchema(context, "IMPLEMENTING", checkId);
+}
+
+/** @param {string} worktree @param {string} commit @param {string[]} projectPaths */
+async function restorePathsToCommit(worktree, commit, projectPaths) {
+  if (projectPaths.length === 0) {
+    return;
+  }
+  for (const projectPath of projectPaths) {
+    const destination = resolveSafeProjectPath(worktree, projectPath);
+    const trackedAtBaseline =
+      await tryGit(worktree, ["cat-file", "-e", `${commit}:${projectPath}`]) !== null;
+    if (trackedAtBaseline) {
+      await git(
+        worktree,
+        ["restore", "--source", commit, "--staged", "--worktree", "--", projectPath],
+      );
+    } else {
+      await tryGit(worktree, ["rm", "--cached", "--ignore-unmatch", "--", projectPath]);
+      await rm(destination, { recursive: true, force: true });
+    }
+  }
+}
+
+/** @param {Record<string, any>} context */
+async function cleanupParallelWorkerRoots(context) {
+  const roots = Array.isArray(context?.parallelWorkerRoots)
+    ? [...context.parallelWorkerRoots].reverse()
+    : [];
+  for (const workerRoot of roots) {
+    await removeWorkerWorktree(context.target, workerRoot);
+  }
+  if (Array.isArray(context?.parallelWorkerRoots)) {
+    context.parallelWorkerRoots.length = 0;
+  }
+}
+
+/** @param {string} target @param {string} workerRoot */
+async function removeWorkerWorktree(target, workerRoot) {
+  assertWorkerRoot(target, workerRoot);
+  await tryGit(target, ["worktree", "remove", "--force", workerRoot]);
+  if (await pathExists(workerRoot)) {
+    await rm(workerRoot, { recursive: true, force: true });
+    await tryGit(target, ["worktree", "remove", "--force", workerRoot]);
+  }
+  const normalized = normalizedFilesystemPath(workerRoot);
+  const registered = (await git(target, ["worktree", "list", "--porcelain"]))
+    .split(/\r?\n/u)
+    .filter((/** @type {string} */ line) => line.startsWith("worktree "))
+    .map((/** @type {string} */ line) =>
+      normalizedFilesystemPath(line.slice("worktree ".length))
+    );
+  if (registered.includes(normalized)) {
+    throw new Error(`Isolated Worker worktree could not be removed: ${workerRoot}.`);
+  }
+}
+
+/** @param {string} target @param {string} workerRoot */
+function assertWorkerRoot(target, workerRoot) {
+  const worktreeRoot = path.resolve(`${target}.engineering-worktrees`);
+  const resolved = path.resolve(workerRoot);
+  const relative = path.relative(worktreeRoot, resolved);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(`Refused unsafe Worker worktree cleanup outside ${worktreeRoot}.`);
+  }
+}
+
+/** @param {string} worktree @param {string} projectPath */
+function resolveSafeProjectPath(worktree, projectPath) {
+  if (!isSafeLeasedPath(projectPath)) {
+    throw new Error(`Refused unsafe project path recovery: ${projectPath}.`);
+  }
+  const resolved = path.resolve(worktree, ...projectPath.split("/"));
+  const relative = path.relative(path.resolve(worktree), resolved);
+  if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    throw new Error(`Refused project path recovery outside the worktree: ${projectPath}.`);
+  }
+  return resolved;
+}
+
+/** @param {string} value */
+function normalizedFilesystemPath(value) {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+/** @param {string} value */
+async function pathExists(value) {
+  try {
+    await lstat(value);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** @param {string} file */
+async function tryReadBuffer(file) {
+  try {
+    return await readFile(file);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -2341,6 +2997,7 @@ async function executeRunCommand(context, entry, qualityReview, environmentAddit
     context.worktree,
     { ...commandEnvironment(context.commandGuard), ...environmentAdditions },
   );
+  const deniedGitCommand = await tryReadText(context.commandGuard.deniedFile);
   const realRunAfter = await captureBranchState(
     context.worktree,
     context.branch,
@@ -2368,8 +3025,15 @@ async function executeRunCommand(context, entry, qualityReview, environmentAddit
     shadowAfter.stableHead !== shadowBefore.stableHead;
   const shadowRunChanged = !sameBranchState(shadowBefore.run, shadowAfter.run);
   const repositoryWrite =
-    protectedRepositoryChanged || shadowProtectedChanged || result.exitCode === 87;
-  const rootWrite = realRunChanged || shadowRunChanged || result.exitCode === 86;
+    protectedRepositoryChanged ||
+    shadowProtectedChanged ||
+    result.exitCode === 87 ||
+    deniedGitCommand?.startsWith("87\t") === true;
+  const rootWrite =
+    realRunChanged ||
+    shadowRunChanged ||
+    result.exitCode === 86 ||
+    deniedGitCommand?.startsWith("86\t") === true;
   if (repositoryWrite || rootWrite) {
     return {
       result,
@@ -2574,6 +3238,7 @@ async function createGitCommandGuard(worktreeRoot, runId, target) {
   const objectDirectory = path.join(root, "objects");
   const gitDirectory = path.join(root, "git-dir");
   const indexFile = path.join(root, "external-command.index");
+  const deniedFile = path.join(root, "denied-git-command.txt");
   await mkdir(bin, { recursive: true });
   await mkdir(emptyHooks, { recursive: true });
   await mkdir(objectDirectory, { recursive: true });
@@ -2588,7 +3253,7 @@ async function createGitCommandGuard(worktreeRoot, runId, target) {
   const gitObjectPath = await git(target, ["rev-parse", "--git-path", "objects"]);
   const realObjectDirectory = path.resolve(target, gitObjectPath);
   const wrapperPath = path.join(bin, "git-guard.mjs");
-  const wrapperSource = `import { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nconst command = args[0] ?? "";\nconst readOnly = new Set(["diff", "for-each-ref", "log", "ls-files", "rev-parse", "show", "status"]);\nconst allowed = readOnly.has(command) || (command === "reflog" && (args.length === 1 || args[1] === "show")) || (command === "worktree" && args[1] === "list");\nif (!allowed) {\n  process.exitCode = command === "update-ref" || command === "branch" || command === "checkout" || command === "switch" ? 87 : 86;\n} else {\n  const child = spawnSync(${JSON.stringify(realGit)}, args, { env: process.env, shell: false, stdio: "inherit", windowsHide: true });\n  process.exitCode = child.status ?? 1;\n}\n`;
+  const wrapperSource = `import { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nconst command = args[0] ?? "";\nconst readOnly = new Set(["diff", "for-each-ref", "log", "ls-files", "rev-parse", "show", "status"]);\nconst allowed = readOnly.has(command) || (command === "reflog" && (args.length === 1 || args[1] === "show")) || (command === "worktree" && args[1] === "list");\nif (!allowed) {\n  const code = command === "update-ref" || command === "branch" || command === "checkout" || command === "switch" || command === "merge" ? 87 : 86;\n  appendFileSync(${JSON.stringify(deniedFile)}, \`\${code}\\t\${args.join(" ")}\\n\`, "utf8");\n  process.exitCode = code;\n} else {\n  const child = spawnSync(${JSON.stringify(realGit)}, args, { env: process.env, shell: false, stdio: "inherit", windowsHide: true });\n  process.exitCode = child.status ?? 1;\n}\n`;
   await writeFile(wrapperPath, wrapperSource, "utf8");
   if (process.platform === "win32") {
     await writeFile(
@@ -2613,6 +3278,7 @@ async function createGitCommandGuard(worktreeRoot, runId, target) {
     objectDirectory,
     realObjectDirectory,
     indexFile,
+    deniedFile,
   };
 }
 
@@ -2627,6 +3293,7 @@ async function resetCommandGuard(guard, repository, branch) {
   await rm(guard.gitDirectory, { recursive: true, force: true });
   await rm(guard.objectDirectory, { recursive: true, force: true });
   await rm(guard.indexFile, { force: true });
+  await rm(guard.deniedFile, { force: true });
   await mkdir(guard.objectDirectory, { recursive: true });
   await gitWithEnvironment(guard.worktree, ["init", "--bare", guard.gitDirectory], commandEnvironment());
   const environment = shadowGitEnvironment(guard);
@@ -2673,11 +3340,11 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
     const worktree = path.join(worktreeRoot, runId);
     const artifactRoot = path.join(worktree, ".engineering", "runs", runId);
     try {
-      const [state, verification] = await Promise.all([
+      let [state, verification] = await Promise.all([
         readJson(path.join(artifactRoot, "state.json")),
         readJson(path.join(artifactRoot, "verification.json")),
       ]);
-      const [graph, humanGate] = await Promise.all([
+      let [graph, humanGate] = await Promise.all([
         tryReadJson(path.join(artifactRoot, "ticket-graph.json")),
         tryReadJson(path.join(artifactRoot, "human-gate.json")),
       ]);
@@ -2868,6 +3535,20 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
       if (currentBranch !== graph.branch) {
         throw new Error(`Resumable ${mode} worktree ${runId} is on an unexpected branch.`);
       }
+      if (
+        mode === "DEEP" &&
+        await restoreInterruptedDeepCheckpointIndex(graph, head, worktree, artifactRoot)
+      ) {
+        [state, verification, graph, humanGate] = await Promise.all([
+          readJson(path.join(artifactRoot, "state.json")),
+          readJson(path.join(artifactRoot, "verification.json")),
+          readJson(path.join(artifactRoot, "ticket-graph.json")),
+          tryReadJson(path.join(artifactRoot, "human-gate.json")),
+        ]);
+        if (graph.decisionCommit === null) {
+          return findResumableStandardRun(worktreeRoot, requestHash, baseCommit, mode);
+        }
+      }
       await reconcileCheckpointFromHead(
         graph,
         head,
@@ -2895,6 +3576,7 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
               "manifest-approval.json",
               "migration-contract.json",
               "migration-manifest.json",
+              "parallel-execution.json",
               "rollback-plan.json",
             ]
           : []),
@@ -3379,6 +4061,7 @@ function ticketContract(ticket) {
     verificationIds: ticket.verificationIds,
     dependencies: ticket.dependencies,
     writeLease: ticket.writeLease,
+    ...(ticket.contractIds ? { contractIds: ticket.contractIds } : {}),
     contextPaths: ticket.contextPaths,
   };
 }
@@ -3415,6 +4098,60 @@ export function checkpointCommitsInExecutionOrder(graph) {
   });
 }
 
+/** @param {Record<string, any>} graph @param {string} head @param {string} worktree @param {string} artifactRoot */
+async function restoreInterruptedDeepCheckpointIndex(graph, head, worktree, artifactRoot) {
+  const completedCommits = checkpointCommitsInExecutionOrder(graph);
+  const durableHead = completedCommits.at(-1) ?? graph.decisionCommit ?? graph.baseCommit;
+  if (durableHead !== head) {
+    return false;
+  }
+  const candidates = graph.tickets.filter(
+    (/** @type {any} */ ticket) =>
+      ticket.status === "IN_PROGRESS" &&
+      ticket.verification?.status === "PASS" &&
+      !ticket.checkpointCommit,
+  );
+  if (candidates.length === 0) {
+    return false;
+  }
+  if (candidates.length !== 1) {
+    throw new Error(`Resumable DEEP worktree ${graph.runId} has ambiguous uncommitted checkpoints.`);
+  }
+  const ticket = candidates[0];
+  const artifactPath = path.relative(worktree, artifactRoot).replaceAll("\\", "/");
+  const entries = await readdir(artifactRoot, { withFileTypes: true });
+  const expectedArtifacts = /** @type {Record<string, any>} */ ({});
+  for (const entry of entries) {
+    if (!entry.isFile() || !RUN_ARTIFACT_FILES.has(entry.name)) {
+      throw new Error(`Resumable DEEP pre-commit artifact is not allowlisted: ${entry.name}.`);
+    }
+    expectedArtifacts[entry.name] = await readJson(path.join(artifactRoot, entry.name));
+  }
+  const [stagedPaths, unstagedPaths, untrackedPaths] = await Promise.all([
+    gitNullPaths(worktree, ["diff", "--cached", "--name-only", "-z", head]),
+    gitNullPaths(worktree, ["diff", "--name-only", "-z"]),
+    gitNullPaths(worktree, ["ls-files", "--others", "--exclude-standard", "-z"]),
+  ]);
+  const escapedPath = stagedPaths.find(
+    (/** @type {string} */ projectPath) =>
+      !ticket.writeLease.includes(projectPath) && !projectPath.startsWith(`${artifactPath}/`),
+  );
+  if (
+    stagedPaths.length === 0 ||
+    unstagedPaths.length > 0 ||
+    untrackedPaths.length > 0 ||
+    escapedPath
+  ) {
+    throw new Error(`Resumable DEEP pre-commit checkpoint ${ticket.id} is not a bounded staged result.`);
+  }
+  await validateRunArtifacts(artifactRoot, expectedArtifacts);
+  await validateGitArtifacts(worktree, "index", artifactPath, expectedArtifacts);
+  await validateLeasedIndex(worktree, ticket.writeLease);
+  await git(worktree, ["reset", "--hard", "HEAD"]);
+  await git(worktree, ["clean", "-fd"]);
+  return true;
+}
+
 /** @param {Record<string, any>} graph @param {string} head @param {string} baseCommit @param {string} worktree @param {string} artifactRoot @param {"STANDARD" | "DEEP"} [mode] */
 async function reconcileCheckpointFromHead(
   graph,
@@ -3427,6 +4164,19 @@ async function reconcileCheckpointFromHead(
   const completedCommits = checkpointCommitsInExecutionOrder(graph);
   const previous = completedCommits.at(-1) ?? baseCommit;
   if (previous === head) {
+    if (mode === "DEEP" && completedCommits.length > 0) {
+      const ticketId = graph.executionOrder.at(-1);
+      const ticket = graph.tickets.find(
+        (/** @type {any} */ candidate) => candidate.id === ticketId,
+      );
+      await reconcileDeepParallelIntegrationFromHead(
+        ticket,
+        graph.executionOrder.length,
+        head,
+        worktree,
+        artifactRoot,
+      );
+    }
     return;
   }
   const parents = (await git(worktree, ["show", "-s", "--format=%P", head])).split(" ");
@@ -3461,7 +4211,65 @@ async function reconcileCheckpointFromHead(
   ticket.status = "COMPLETE";
   ticket.checkpointCommit = head;
   ticket.checkpointedAt = await git(worktree, ["show", "-s", "--format=%cI", head]);
+  if (mode === "DEEP") {
+    await reconcileDeepParallelIntegrationFromHead(
+      ticket,
+      graph.executionOrder.length + 1,
+      head,
+      worktree,
+      artifactRoot,
+    );
+  }
   graph.executionOrder.push(ticket.id);
+}
+
+/** @param {Record<string, any> | undefined} ticket @param {number} sequence @param {string} head @param {string} worktree @param {string} artifactRoot */
+async function reconcileDeepParallelIntegrationFromHead(
+  ticket,
+  sequence,
+  head,
+  worktree,
+  artifactRoot,
+) {
+  if (!ticket || ticket.checkpointCommit !== head) {
+    throw new Error(`Resumable DEEP checkpoint ${head} is missing its completed ticket.`);
+  }
+  const parallelPath = path.relative(
+    worktree,
+    path.join(artifactRoot, "parallel-execution.json"),
+  ).replaceAll("\\", "/");
+  const [parallel, committedParallel] = await Promise.all([
+    readJson(path.join(artifactRoot, "parallel-execution.json")),
+    readGitJson(worktree, head, parallelPath),
+  ]);
+  const integrationsForTicket = (/** @type {Record<string, any>} */ value) =>
+    value?.batches
+      ?.flatMap((/** @type {any} */ batch) => batch.integrations ?? [])
+      .filter((/** @type {any} */ integration) => integration.ticketId === ticket.id) ?? [];
+  const committedIntegrations = integrationsForTicket(committedParallel);
+  const committedIntegration = committedIntegrations[0];
+  if (
+    committedIntegrations.length !== 1 ||
+    committedIntegration.sequence !== sequence ||
+    committedIntegration.targetedVerificationStatus !== "PASS" ||
+    committedIntegration.state !== "CHECKPOINT_PENDING" ||
+    committedIntegration.checkpointCommit !== null
+  ) {
+    throw new Error(`Resumable DEEP checkpoint ${head} is missing its pending integration evidence.`);
+  }
+  const expectedParallel = JSON.parse(JSON.stringify(committedParallel));
+  const expectedIntegration = integrationsForTicket(expectedParallel)[0];
+  expectedIntegration.checkpointCommit = head;
+  expectedIntegration.state = "CHECKPOINTED";
+  const currentSource = JSON.stringify(parallel);
+  const committedSource = JSON.stringify(committedParallel);
+  const expectedSource = JSON.stringify(expectedParallel);
+  if (currentSource !== committedSource && currentSource !== expectedSource) {
+    throw new Error(`Resumable DEEP checkpoint ${head} contains parallel evidence drift.`);
+  }
+  if (currentSource === committedSource) {
+    await writeJson(path.join(artifactRoot, "parallel-execution.json"), expectedParallel);
+  }
 }
 
 /** @param {Record<string, any>} graph */
@@ -3522,6 +4330,7 @@ function parseExecutionPlan(source, request, commands) {
   ]);
   const requestLease = new Set(request.writeLease);
   const requestContext = new Set(request.standard.contextPaths);
+  const allowOverlappingLeases = request.classification?.selectedMode === "DEEP";
   const ticketIds = new Set();
   const leasedPaths = new Set();
   for (const ticket of plan.tickets) {
@@ -3546,6 +4355,15 @@ function parseExecutionPlan(source, request, commands) {
       !Array.isArray(ticket.writeLease) ||
       ticket.writeLease.length === 0 ||
       !ticket.writeLease.every((/** @type {string} */ leasedPath) => requestLease.has(leasedPath)) ||
+      (
+        ticket.contractIds !== undefined &&
+        (
+          !Array.isArray(ticket.contractIds) ||
+          ticket.contractIds.length === 0 ||
+          new Set(ticket.contractIds).size !== ticket.contractIds.length ||
+          !ticket.contractIds.every(isSafeEvidenceId)
+        )
+      ) ||
       !Array.isArray(ticket.contextPaths) ||
       ticket.contextPaths.length === 0 ||
       !ticket.contextPaths.every((/** @type {string} */ contextPath) => requestContext.has(contextPath))
@@ -3554,7 +4372,7 @@ function parseExecutionPlan(source, request, commands) {
     }
     ticketIds.add(ticket.id);
     for (const leasedPath of ticket.writeLease) {
-      if (leasedPaths.has(leasedPath)) {
+      if (!allowOverlappingLeases && leasedPaths.has(leasedPath)) {
         throw new Error("STANDARD Execution Ticket Write Leases must not overlap.");
       }
       leasedPaths.add(leasedPath);
@@ -3640,6 +4458,9 @@ function advisorEvidence(planned) {
       ...ticket.writeLease.map(
         (/** @type {string} */ leasedPath) => `write-lease-${ticket.id}-${leasedPath}`,
       ),
+      ...(ticket.contractIds ?? []).map(
+        (/** @type {string} */ contractId) => `parallel-contract-${ticket.id}-${contractId}`,
+      ),
       ...ticket.verificationIds.map(
         (/** @type {string} */ verificationId) => `verification-${ticket.id}-${verificationId}`,
       ),
@@ -3718,6 +4539,7 @@ async function createReviewPacket(context, role, requirements) {
           "manifest-approval.json",
           "migration-contract.json",
           "migration-manifest.json",
+          "parallel-execution.json",
           "rollback-plan.json",
         ]
       : []),
@@ -4133,6 +4955,18 @@ function isSafeEvidenceId(value) {
  */
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
+}
+
+/** @param {string} file */
+async function tryReadText(file) {
+  try {
+    return await readFile(file, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /** @param {string} file */

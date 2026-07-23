@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Guard DEEP parallelism with a dedicated validator that requires pairwise
+  disjoint Write Leases, declared contract IDs, and Worker worktrees; serialize
+  any overlapping or unproven frontier.
+- Run eligible DEEP Workers concurrently in separate detached worktrees while
+  Root accepts results deterministically, targets every integration before its
+  checkpoint, and runs full relevant verification after the last result.
+- Block nested Worker commit/integration attempts and conflicting or divergent
+  results with durable corrective work, no silent merge, and no change to the
+  last accepted integration HEAD, `develop`, or `main`.
 - Execute a minimal one-ticket DEEP lifecycle through linked domain evidence,
   canonical CONTEXT/ADR decision records, migration and rollback contracts,
   exact hash-bound and Write-Lease-bound durable Human Gate approval,

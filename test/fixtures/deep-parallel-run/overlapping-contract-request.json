@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Serialize two high-risk tickets sharing a public contract",
+    "scope": "MULTI_PART",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/a.mjs", "src/b.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "Module A satisfies the shared public contract.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      },
+      {
+        "id": "AC-B",
+        "statement": "Module B satisfies the shared public contract.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-SHARED-CONTRACT",
+        "interface": "The shared public module contract.",
+        "verificationIds": ["ticket-test"]
+      }
+    ],
+    "contextPaths": ["src/a.mjs", "src/b.mjs", "test/parallel.test.mjs"],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "overlapping-contract-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

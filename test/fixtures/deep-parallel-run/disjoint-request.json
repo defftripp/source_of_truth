@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Integrate two independent high-risk modules",
+    "scope": "MULTI_PART",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/a.mjs", "src/b.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "Module A exposes its independently verified result.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      },
+      {
+        "id": "AC-B",
+        "statement": "Module B exposes its independently verified result.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-PUBLIC-MODULES",
+        "interface": "The public module A and module B exports.",
+        "verificationIds": ["ticket-test"]
+      }
+    ],
+    "contextPaths": [
+      "src/a.mjs",
+      "src/b.mjs",
+      "test/parallel.test.mjs"
+    ],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "disjoint-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

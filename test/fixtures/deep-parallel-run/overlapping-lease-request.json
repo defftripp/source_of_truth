@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Serialize two high-risk writers with an overlapping lease",
+    "scope": "MULTI_PART",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/a.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "The first writer produces an observable result.",
+        "verificationIds": ["ticket-test", "observed-overlap"]
+      },
+      {
+        "id": "AC-B",
+        "statement": "The second writer produces the final observable result.",
+        "verificationIds": ["ticket-test", "observed-overlap"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-SHARED-MODULE",
+        "interface": "The shared public module export.",
+        "verificationIds": ["ticket-test"]
+      }
+    ],
+    "contextPaths": ["src/a.mjs", "test/parallel.test.mjs"],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "overlapping-lease-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["overlap-full-test", "typecheck", "build", "observed-overlap"]
+  }
+}

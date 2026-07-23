@@ -76,3 +76,25 @@ incomplete plan is REVISE; and changed destructive scope
 blocks before Advisor or Worker. Successful DEEP work uses the inherited Worker
 guard, Root checkpoints, durable local resume, independent reviews, final
 instrumental verification, and READY_FOR_HUMAN terminal gate.
+
+A multi-ticket DEEP frontier is parallel only after the dedicated eligibility
+validator proves that every Worker has a distinct worktree and that all declared
+Write Leases and contract IDs are pairwise disjoint. Missing contract claims or
+any overlap selects the existing sequential executor automatically. Eligible
+Workers start together from one accepted checkpoint in detached worktrees.
+They receive bounded packets, cannot commit, integrate, or spawn subagents, and
+return uncommitted leased results to Root.
+
+Root validates the complete batch before accepting any result, then applies
+each result in deterministic ticket order without merging. It reruns targeted
+verification before each Root-owned checkpoint and runs full relevant
+verification only after the final accepted integration. Pending results are
+revalidated against their common accepted base before a checkpoint; interrupted
+runtime-owned Worker worktrees are discarded and verified absent before the
+batch is relaunched. Worker authority
+violations and divergent, conflicting, or out-of-lease results create BLOCKED
+corrective work; silent merge is forbidden and the accepted integration HEAD is
+left unchanged. Parallel timelines, worktree roots, eligibility reasons,
+targeted checks, checkpoints, and final verification ordering are durable run
+evidence. Protected Integration and Stable branches remain unchanged, and
+success still terminates at READY_FOR_HUMAN.

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Reject targeted verification that mutates a pending Worker lease",
+    "scope": "MULTI_PART",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/a.mjs", "src/b.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "Module A targeted verification cannot mutate pending module B.",
+        "verificationIds": ["mutating-ticket-test", "observed-behavior"]
+      },
+      {
+        "id": "AC-B",
+        "statement": "Module B remains bound to the common accepted batch base.",
+        "verificationIds": ["mutating-ticket-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-BATCH-PREFLIGHT",
+        "interface": "The accepted Root state before the first parallel checkpoint.",
+        "verificationIds": ["mutating-ticket-test"]
+      }
+    ],
+    "contextPaths": ["src/a.mjs", "src/b.mjs", "test/parallel.test.mjs"],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "mutating-targeted-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "mutating-ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

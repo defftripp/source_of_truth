@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Block a conflicting result from an isolated DEEP Worker",
+    "scope": "MULTI_PART",
+    "risk": "HIGH",
+    "ambiguity": "NONE",
+    "reversibility": "HARD",
+    "hardToReverseProfile": "SECURITY"
+  },
+  "repository": { "integrationBranch": "develop", "stableBranch": "main" },
+  "writeLease": ["src/a.mjs", "src/b.mjs"],
+  "deep": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-A",
+        "statement": "Module A accepts only its isolated result.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      },
+      {
+        "id": "AC-B",
+        "statement": "Module B cannot conflict with module A.",
+        "verificationIds": ["ticket-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-CONFLICT",
+        "interface": "Root validation of isolated Worker results.",
+        "verificationIds": ["ticket-test"]
+      }
+    ],
+    "contextPaths": ["src/a.mjs", "src/b.mjs", "test/parallel.test.mjs"],
+    "requiredEvidenceIds": ["fact-security-boundary", "fact-rollback-owner"]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "disjoint-planner",
+    "advisor": "advisor-gate",
+    "worker": "conflicting-worker",
+    "ticketVerification": "ticket-test",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

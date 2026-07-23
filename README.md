@@ -100,6 +100,28 @@ success. A successful one-ticket DEEP run passes fresh Spec and Quality reviews,
 reruns every selected instrumental check, and stops at `READY_FOR_HUMAN` with
 `accepted: false`.
 
+For a multi-ticket DEEP frontier, parallel execution is denied unless every
+ticket declares a non-empty `contractIds` set and the runtime proves pairwise
+disjoint Write Leases, contract IDs, and Worker worktree roots. Eligible Workers
+start from the same accepted Root checkpoint in distinct detached worktrees and
+may neither commit, integrate, nor delegate. Any missing proof, Write Lease
+overlap, or contract overlap automatically selects sequential execution.
+
+Root accepts isolated results one at a time without `git merge`, reruns the
+ticket's targeted verification, and creates the next checkpoint only after that
+verification passes. The complete batch is preflighted against one accepted
+Root state before the first integration; pending results are revalidated before
+each checkpoint. Runtime-owned stale Worker worktrees from an interrupted batch
+are removed and verified before a deterministic relaunch.
+`parallel-execution.json` preserves eligibility reasons,
+Worker intervals and worktree roots, ordered Root integrations, targeted-check
+status, checkpoint commits, and final full-verification ordering. A forbidden
+Git action, out-of-lease result, divergence, or integration conflict creates
+`corrective-work.json` with terminal `BLOCKED`; no result from that failed batch
+is silently merged and the last accepted Root HEAD remains unchanged.
+`develop` and `main` remain protected, and successful execution still stops at
+`READY_FOR_HUMAN` with `accepted: false`.
+
 The installed V1 runtime executes blockers-first STANDARD ticket graphs end to end.
 STANDARD records evidence-backed repository facts, a spec-lite with falsifiable
 acceptance criteria and testing seams, fully covered vertical Execution Tickets,
@@ -107,7 +129,8 @@ explicit blocking edges, and strict Advisor approval. Root deterministically
 selects the lexicographically first open ticket whose blockers are complete. Each
 Worker invocation sees only its ticket-specific durable Context Packet and
 exclusive Write Lease, cannot commit through the command guard, and cannot
-delegate subagents under its contract.
+delegate subagents under its contract. The command guard also records and
+rejects forbidden Git commands launched by a nested Worker process.
 
 If repository research leaves one real STANDARD decision unresolved, the run
 stops before spec, planning, and Worker execution with one durable Human Gate.
