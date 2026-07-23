@@ -738,6 +738,101 @@ test("one blocking review finding becomes one corrective ticket and fresh reruns
   }
 });
 
+test("blocking Solution Fitness finding is corrected before fresh reviews and full verification", async () => {
+  const prepared = await prepareTarget("solution-fitness");
+  try {
+    const result = await invokeRun(prepared.target, "fitness-request.json");
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, "READY_FOR_HUMAN");
+    assert.equal(report.accepted, false);
+    assert.deepEqual(report.executionOrder, ["TICKET-1", "CORRECTION-R1-1"]);
+    assert.equal(report.run.workerCount, 2);
+    assert.equal(report.solutionFitness.status, "PASS");
+    assert.equal(report.solutionFitness.context.reviewRound, 2);
+    assert.equal(report.specReview.context.reviewRound, 2);
+    assert.equal(report.qualityReview.context.reviewRound, 2);
+    assert.equal(report.verification.fullRelevant.status, "PASS");
+    assert.equal(report.verification.fullRelevant.afterExecutionCount, 2);
+
+    const artifactRoot = path.join(report.run.worktree, ...report.run.artifactPath.split("/"));
+    const graph = JSON.parse(await readFile(path.join(artifactRoot, "ticket-graph.json"), "utf8"));
+    assert.equal(graph.reviewRounds.length, 2);
+    assert.deepEqual(
+      graph.reviewRounds.map((/** @type {any} */ round) => round.fitness),
+      [
+        {
+          required: true,
+          status: "BLOCKED",
+          codeFingerprint: graph.reviewRounds[0].codeFingerprint,
+        },
+        {
+          required: true,
+          status: "PASS",
+          codeFingerprint: graph.reviewRounds[1].codeFingerprint,
+        },
+      ],
+    );
+    assert.deepEqual(graph.reviewRounds[0].findings[0], {
+      findingId: "FITNESS-ABSURD-1",
+      reviewArtifact: "solution-fitness.json",
+      correctiveTicketId: "CORRECTION-R1-1",
+    });
+    const correction = graph.tickets.find(
+      (/** @type {any} */ ticket) => ticket.id === "CORRECTION-R1-1",
+    );
+    assert.deepEqual(correction.sourceFinding, {
+      artifact: "solution-fitness.json",
+      role: "SOLUTION_FITNESS",
+      id: "FITNESS-ABSURD-1",
+    });
+    assert.equal(correction.status, "COMPLETE");
+
+    const firstFitness = JSON.parse(
+      await readFile(path.join(artifactRoot, "solution-fitness.json"), "utf8"),
+    );
+    const secondFitness = JSON.parse(
+      await readFile(path.join(artifactRoot, "solution-fitness-2.json"), "utf8"),
+    );
+    const correctiveWork = JSON.parse(
+      await readFile(path.join(artifactRoot, "corrective-work.json"), "utf8"),
+    );
+    assert.equal(firstFitness.status, "BLOCKED");
+    assert.equal(secondFitness.status, "PASS");
+    assert.deepEqual(firstFitness.ordering, [
+      "VERSION_DETECTION",
+      "DOCUMENTATION",
+      "COMPARISON",
+      "VERDICT",
+    ]);
+    assert.equal(firstFitness.version.installedVersion, "2.4.1");
+    assert.equal(firstFitness.documentation.documentedVersion, "2.4.1");
+    assert.deepEqual(correctiveWork.rounds[0].sourceArtifacts, [
+      "solution-fitness.json",
+      "spec-review.json",
+      "quality-review.json",
+    ]);
+    assert.equal(
+      createHash("sha256").update(
+        await readFile(path.join(artifactRoot, "solution-fitness.json")),
+      ).digest("hex"),
+      graph.reviewRounds[0].artifacts.find(
+        (/** @type {any} */ artifact) => artifact.name === "solution-fitness.json",
+      ).sha256,
+    );
+    assert.ok(
+      report.stateHistory
+        .map((/** @type {any} */ entry) => entry.state)
+        .filter((/** @type {string} */ state) => state === "SOLUTION_FITNESS")
+        .length === 2,
+    );
+    assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
+    assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
 test("dependent blocking findings execute corrective tickets blockers first", async () => {
   const prepared = await prepareTarget("corrective-dependencies");
   try {

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Replace an absurd custom pipeline after Solution Fitness evidence",
+    "scope": "MULTI_PART",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "writeLease": ["src/message.mjs"],
+  "standard": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "statement": "The public message export returns the STANDARD result.",
+        "verificationIds": ["ticket-message-test", "observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-1",
+        "interface": "The public message module export.",
+        "verificationIds": ["ticket-message-test"]
+      }
+    ],
+    "contextPaths": ["src/message.mjs", "test/message.test.mjs"]
+  },
+  "fitness": {
+    "schemaVersion": 1,
+    "risk": "LOW",
+    "triggers": {
+      "repositoryPrecedent": false,
+      "dependencyApi": true,
+      "substantialComplexity": true
+    }
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "one-ticket-planner",
+    "advisor": "advisor-gate",
+    "worker": "bounded-worker",
+    "ticketVerification": "ticket-message-test",
+    "fitnessVersion": "fitness-version",
+    "fitnessDocumentation": "fitness-documentation",
+    "solutionFitness": "solution-fitness",
+    "specReview": "spec-review",
+    "qualityReview": "quality-review",
+    "relevantChecks": ["full-test", "typecheck", "build", "observed-behavior"]
+  }
+}

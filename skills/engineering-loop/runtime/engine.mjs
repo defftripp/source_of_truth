@@ -19,6 +19,12 @@ import {
 } from "./deep-contracts.mjs";
 import { evaluateDeepParallelEligibility } from "./parallel-eligibility.mjs";
 import {
+  selectFitnessTrigger,
+  validateFitnessDocumentationEvidence,
+  validateFitnessVersionEvidence,
+  validateSolutionFitnessArtifact,
+} from "./fitness-contracts.mjs";
+import {
   createCorrectiveTickets,
   validateImmutableReviewArtifacts,
   validateIndependentReview,
@@ -45,6 +51,7 @@ const RUN_ARTIFACT_FILES = new Set([
   "research.json",
   "rollback-plan.json",
   "result.json",
+  "solution-fitness.json",
   "spec-lite.json",
   "spec-review.json",
   "state.json",
@@ -220,6 +227,10 @@ function validateRunRequest(value) {
   const plannedExecution =
     (classification.selectedMode === "STANDARD" && request.standard) ||
     (classification.selectedMode === "DEEP" && request.deep);
+  const fitness = validateFitnessRequest(request.fitness, request.task.risk);
+  if (fitness.required && !plannedExecution) {
+    throw new Error("Solution Fitness triggers require a planned STANDARD or DEEP run.");
+  }
   const commandFields =
     plannedExecution
       ? [
@@ -230,6 +241,9 @@ function validateRunRequest(value) {
           "ticketVerification",
           "specReview",
           "qualityReview",
+          ...(fitness.required
+            ? ["fitnessVersion", "fitnessDocumentation", "solutionFitness"]
+            : []),
         ]
       : ["implementation", "focusedCheck", "qualityReview"];
   for (const field of commandFields) {
@@ -245,6 +259,16 @@ function validateRunRequest(value) {
   ) {
     throw new Error("commands.relevantChecks must contain unique registered command IDs.");
   }
+  if (
+    !fitness.required &&
+    [
+      request.commands.fitnessVersion,
+      request.commands.fitnessDocumentation,
+      request.commands.solutionFitness,
+    ].some((command) => command !== undefined)
+  ) {
+    throw new Error("Solution Fitness provider commands require an active trigger.");
+  }
   if (classification.selectedMode === "STANDARD" && request.standard) {
     validateStandardRequest(request);
   }
@@ -258,7 +282,45 @@ function validateRunRequest(value) {
     }
     validateDeepManifestAnswer(request.humanAnswers);
   }
-  return { ...request, classification };
+  return { ...request, classification, fitness };
+}
+
+/** @param {unknown} value @param {unknown} taskRisk */
+function validateFitnessRequest(value, taskRisk) {
+  if (value === undefined) {
+    return {
+      schemaVersion: 1,
+      risk: taskRisk === "HIGH" ? "HIGH" : "LOW",
+      triggers: {
+        repositoryPrecedent: false,
+        dependencyApi: false,
+        substantialComplexity: false,
+      },
+      required: false,
+      reasons: [],
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Solution Fitness request must be an object.");
+  }
+  const fitness = /** @type {Record<string, any>} */ (value);
+  if (
+    JSON.stringify(Object.keys(fitness).sort()) !==
+      JSON.stringify(["risk", "schemaVersion", "triggers"]) ||
+    fitness.schemaVersion !== 1 ||
+    !["LOW", "HIGH"].includes(fitness.risk) ||
+    (taskRisk === "HIGH" && fitness.risk !== "HIGH")
+  ) {
+    throw new Error("Solution Fitness request risk and schema are invalid.");
+  }
+  const trigger = selectFitnessTrigger(fitness.triggers);
+  return {
+    schemaVersion: 1,
+    risk: fitness.risk,
+    triggers: fitness.triggers,
+    required: trigger.required,
+    reasons: trigger.reasons,
+  };
 }
 
 /** @param {Record<string, any>} request */
@@ -705,7 +767,11 @@ async function runStandardTask(target, prepared, request) {
     request.repository.integrationBranch,
     request.repository.stableBranch,
   );
-  const commands = resolveStandardCommands(prepared.registry, request.commands);
+  const commands = resolveStandardCommands(
+    prepared.registry,
+    request.commands,
+    request.fitness.required,
+  );
   const taskProfile = buildTaskProfile(prepared, request, repository);
   const worktreeRoot = `${target}.engineering-worktrees`;
   const requestHash = standardRequestBindingHash(request);
@@ -776,6 +842,8 @@ async function runStandardTask(target, prepared, request) {
     commandGuard,
     artifacts,
     mode,
+    fitness: request.fitness,
+    fitnessRequired: request.fitness.required,
     workerCount: resumable?.graph?.tickets.reduce(
       (/** @type {number} */ total, /** @type {any} */ ticket) => total + ticket.attempts,
       0,
@@ -1158,6 +1226,7 @@ async function runStandardTask(target, prepared, request) {
     const pendingParallelResults = new Map();
     /** @type {Record<string, any> | null} */
     let activeExecutionBatch = null;
+    let solutionFitness;
     let specReview;
     let qualityReview;
 
@@ -1560,6 +1629,137 @@ async function runStandardTask(target, prepared, request) {
       return blockStandardSchema(context, "SPEC_REVIEW", "review-artifact-immutability");
     }
     const reviewRound = ticketGraph.reviewRounds.length + 1;
+    let solutionFitnessArtifact;
+    if (request.fitness.required) {
+      transitionState(stateHistory, "SOLUTION_FITNESS");
+      const versionExecution = await executeReadOnlyRunCommand(
+        context,
+        commands.fitnessVersion,
+      );
+      if (versionExecution.blocked) {
+        return versionExecution.blocked;
+      }
+      if (versionExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "SOLUTION_FITNESS",
+          commands.fitnessVersion,
+          versionExecution.result,
+        );
+      }
+      let versionEvidence;
+      try {
+        versionEvidence = validateFitnessVersionEvidence(
+          parseJsonOutput(
+            versionExecution.result.stdout,
+            "Solution Fitness version provider",
+          ),
+        );
+      } catch {
+        return blockStandardSchema(context, "SOLUTION_FITNESS", "fitness-version-schema");
+      }
+      const versionEvidencePath = path.join(
+        commandGuard.root,
+        `fitness-version-${reviewRound}.json`,
+      );
+      await writeJson(versionEvidencePath, versionEvidence);
+
+      const documentationExecution = await executeReadOnlyRunCommand(
+        context,
+        commands.fitnessDocumentation,
+        { ENGINEERING_FITNESS_VERSION: versionEvidencePath },
+      );
+      if (documentationExecution.blocked) {
+        return documentationExecution.blocked;
+      }
+      if (documentationExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "SOLUTION_FITNESS",
+          commands.fitnessDocumentation,
+          documentationExecution.result,
+        );
+      }
+      let documentationEvidence;
+      try {
+        documentationEvidence = validateFitnessDocumentationEvidence(
+          parseJsonOutput(
+            documentationExecution.result.stdout,
+            "Solution Fitness documentation provider",
+          ),
+          versionEvidence,
+        );
+      } catch {
+        return blockStandardSchema(
+          context,
+          "SOLUTION_FITNESS",
+          "fitness-documentation-schema",
+        );
+      }
+      const documentationEvidencePath = path.join(
+        commandGuard.root,
+        `fitness-documentation-${reviewRound}.json`,
+      );
+      await writeJson(documentationEvidencePath, documentationEvidence);
+
+      const fitnessPacket = await createFitnessPacket(context, request.fitness, reviewRound);
+      const comparisonExecution = await executeReadOnlyRunCommand(
+        context,
+        commands.solutionFitness,
+        {
+          ENGINEERING_FITNESS_PACKET: fitnessPacket.path,
+          ENGINEERING_FITNESS_VERSION: versionEvidencePath,
+          ENGINEERING_FITNESS_DOCUMENTATION: documentationEvidencePath,
+        },
+      );
+      if (comparisonExecution.blocked) {
+        return comparisonExecution.blocked;
+      }
+      if (comparisonExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "SOLUTION_FITNESS",
+          commands.solutionFitness,
+          comparisonExecution.result,
+        );
+      }
+      try {
+        solutionFitness = validateSolutionFitnessArtifact({
+          contract: {
+            packetHash: fitnessPacket.hash,
+            codeFingerprint: fitnessPacket.codeFingerprint,
+            reviewRound,
+            risk: request.fitness.risk,
+            triggers: request.fitness.triggers,
+            writeLease: request.writeLease,
+            contextPaths: plannedRequest.contextPaths,
+            verificationIds: [
+              commands.ticketVerification.id,
+              ...commands.relevantChecks.map((command) => command.id),
+            ],
+            ticketVerificationId: commands.ticketVerification.id,
+          },
+          version: versionEvidence,
+          documentation: documentationEvidence,
+          comparison: parseJsonOutput(
+            comparisonExecution.result.stdout,
+            "Solution Fitness comparison provider",
+          ),
+        });
+      } catch {
+        return blockStandardSchema(context, "SOLUTION_FITNESS", "solution-fitness-schema");
+      }
+      solutionFitnessArtifact = reviewArtifactName("fitness", reviewRound);
+      artifacts[solutionFitnessArtifact] = solutionFitness;
+      await writeJson(path.join(artifactRoot, solutionFitnessArtifact), solutionFitness);
+      if (solutionFitness.status === "BLOCKED" && solutionFitness.findings.length === 0) {
+        return blockStandardSchema(
+          context,
+          "SOLUTION_FITNESS",
+          "solution-fitness-evidence",
+        );
+      }
+    }
     transitionState(stateHistory, "SPEC_REVIEW");
     const specRequirements = plannedRequest.acceptanceCriteria.map(
       (/** @type {any} */ criterion) => criterion.id,
@@ -1609,6 +1809,7 @@ async function runStandardTask(target, prepared, request) {
       "write-lease",
       "worker-contract",
       "verification-freshness",
+      ...(request.fitness.required ? ["solution-fitness"] : []),
       ...(mode === "DEEP" ? ["parallel-eligibility", "root-integration"] : []),
     ];
     const qualityReviewPacket = await createReviewPacket(
@@ -1656,11 +1857,26 @@ async function runStandardTask(target, prepared, request) {
     artifacts[qualityReviewArtifact] = qualityReview;
     await writeJson(path.join(artifactRoot, qualityReviewArtifact), qualityReview);
 
+    /** @type {{ artifact: string, review: Record<string, any> }[]} */
+    const fitnessReviews = [];
+    /** @type {string[]} */
+    const fitnessArtifactNames = [];
+    if (request.fitness.required) {
+      if (!solutionFitnessArtifact || !solutionFitness) {
+        return blockStandardSchema(context, "SOLUTION_FITNESS", "solution-fitness-freshness");
+      }
+      fitnessReviews.push({
+        artifact: solutionFitnessArtifact,
+        review: solutionFitness,
+      });
+      fitnessArtifactNames.push(solutionFitnessArtifact);
+    }
     let corrections;
     try {
       corrections = createCorrectiveTickets({
         round: reviewRound,
         reviews: [
+          ...fitnessReviews,
           { artifact: specReviewArtifact, review: specReview },
           { artifact: qualityReviewArtifact, review: qualityReview },
         ],
@@ -1670,7 +1886,11 @@ async function runStandardTask(target, prepared, request) {
       return blockStandardSchema(context, "QUALITY_REVIEW", "review-finding-contract");
     }
     const reviewArtifacts = await Promise.all(
-      [specReviewArtifact, qualityReviewArtifact].map(async (name) => ({
+      [
+        ...fitnessArtifactNames,
+        specReviewArtifact,
+        qualityReviewArtifact,
+      ].map(async (name) => ({
         name,
         sha256: sha256(await readFile(path.join(artifactRoot, name))),
       })),
@@ -1679,6 +1899,15 @@ async function runStandardTask(target, prepared, request) {
       round: reviewRound,
       codeFingerprint: specReview.context.codeFingerprint,
       artifacts: reviewArtifacts,
+      ...(request.fitness.required
+        ? {
+            fitness: {
+              required: true,
+              status: fitnessReviews[0].review.status,
+              codeFingerprint: fitnessReviews[0].review.context.codeFingerprint,
+            },
+          }
+        : {}),
       reviews: {
         spec: {
           status: specReview.status,
@@ -1702,7 +1931,7 @@ async function runStandardTask(target, prepared, request) {
       correctiveWork.status = "ACTIVE";
       correctiveWork.rounds.push({
         reviewRound,
-        sourceArtifacts: [specReviewArtifact, qualityReviewArtifact],
+        sourceArtifacts: reviewArtifacts.map(({ name }) => name),
         links: corrections.links,
       });
       artifacts["corrective-work.json"] = correctiveWork;
@@ -1812,9 +2041,12 @@ async function runStandardTask(target, prepared, request) {
       currentCodeFingerprint,
       fullVerification: verification.fullRelevant,
       executionCount: ticketGraph.executionOrder.length,
+      fitnessRequired: request.fitness.required,
     });
     if (!releaseEvidence.valid) {
-      const checkId = releaseEvidence.errors.some((error) => /Review|review/u.test(error))
+      const checkId = releaseEvidence.errors.some(
+        (error) => /Review|review|Fitness|fitness/u.test(error),
+      )
         ? "review-freshness"
         : "full-verification-freshness";
       return blockStandardSchema(context, "FULL_VERIFICATION", checkId);
@@ -1922,6 +2154,7 @@ async function runStandardTask(target, prepared, request) {
       coverage: planned.coverage,
       executionOrder: ticketGraph.executionOrder,
       advisor,
+      ...(request.fitness.required ? { solutionFitness } : {}),
       specReview,
       qualityReview,
       verification,
@@ -3079,8 +3312,8 @@ function resolveRunCommands(registry, references) {
   };
 }
 
-/** @param {any} registry @param {Record<string, any>} references */
-function resolveStandardCommands(registry, references) {
+/** @param {any} registry @param {Record<string, any>} references @param {boolean} fitnessRequired */
+function resolveStandardCommands(registry, references, fitnessRequired) {
   const byId = indexVerificationRegistry(registry);
   const relevantChecks = resolveRelevantChecks(byId, references.relevantChecks);
   return {
@@ -3095,6 +3328,25 @@ function resolveStandardCommands(registry, references) {
     ),
     specReview: resolveRegisteredCommand(byId, references.specReview, "spec-review"),
     qualityReview: resolveRegisteredCommand(byId, references.qualityReview, "quality-review"),
+    ...(fitnessRequired
+      ? {
+          fitnessVersion: resolveRegisteredCommand(
+            byId,
+            references.fitnessVersion,
+            "fitness-version",
+          ),
+          fitnessDocumentation: resolveRegisteredCommand(
+            byId,
+            references.fitnessDocumentation,
+            "fitness-documentation",
+          ),
+          solutionFitness: resolveRegisteredCommand(
+            byId,
+            references.solutionFitness,
+            "solution-fitness",
+          ),
+        }
+      : {}),
     relevantChecks,
   };
 }
@@ -3756,6 +4008,7 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
       const expectedReviewArtifacts = reviewArtifactHashes(graph.reviewRounds ?? []);
       const actualReviewArtifactNames = artifactNames
         .filter((name) => name === "spec-review.json" || name === "quality-review.json" ||
+          name === "solution-fitness.json" ||
           isVersionedReviewArtifactName(name))
         .sort();
       if (
@@ -4757,6 +5010,57 @@ function parseWorkerVerification(source, verificationId) {
   };
 }
 
+/** @param {Record<string, any>} context @param {Record<string, any>} fitness @param {number} reviewRound */
+async function createFitnessPacket(context, fitness, reviewRound) {
+  const artifactNames = [
+    "context-packet.json",
+    "task-profile.json",
+    "ticket-graph.json",
+    "ticket.json",
+    "verification.json",
+    ...(context.mode === "DEEP"
+      ? [
+          "domain-decisions.json",
+          "domain-model.json",
+          "manifest-approval.json",
+          "migration-contract.json",
+          "migration-manifest.json",
+          "parallel-execution.json",
+          "rollback-plan.json",
+        ]
+      : []),
+  ];
+  const artifactHashes = [];
+  for (const name of artifactNames) {
+    artifactHashes.push({
+      path: `${context.artifactPath}/${name}`,
+      sha256: sha256(await readFile(path.join(context.artifactRoot, name))),
+    });
+  }
+  const codeFingerprint = await applicationCodeFingerprint(context);
+  const packet = {
+    schemaVersion: 1,
+    role: "SOLUTION_FITNESS",
+    readOnly: true,
+    reviewRound,
+    codeFingerprint,
+    fixedPoint: context.repository.integrationHead,
+    risk: fitness.risk,
+    triggers: fitness.triggers,
+    diffFiles: (await changedPaths(context.worktree, context.repository.integrationHead)).filter(
+      (changedPath) => !changedPath.startsWith(`${context.artifactPath}/`),
+    ),
+    artifactHashes,
+  };
+  const packetPath = path.join(context.commandGuard.root, "solution-fitness-packet.json");
+  await writeJson(packetPath, packet);
+  return {
+    path: packetPath,
+    hash: sha256(await readFile(packetPath)),
+    codeFingerprint,
+  };
+}
+
 /** @param {Record<string, any>} context @param {string} role @param {string[]} requirements @param {number} reviewRound */
 async function createReviewPacket(context, role, requirements, reviewRound) {
   const artifactNames = [
@@ -4787,6 +5091,9 @@ async function createReviewPacket(context, role, requirements, reviewRound) {
           "parallel-execution.json",
           "rollback-plan.json",
         ]
+      : []),
+    ...(role === "QUALITY_REVIEWER" && context.fitnessRequired
+      ? [reviewArtifactName("fitness", reviewRound)]
       : []),
   ];
   const artifactHashes = [];
@@ -4838,8 +5145,13 @@ function parseIndependentReview(source, contract) {
   return validateIndependentReview(parseJsonOutput(source, contract.role), contract);
 }
 
-/** @param {"spec" | "quality"} kind @param {number} reviewRound */
+/** @param {"fitness" | "spec" | "quality"} kind @param {number} reviewRound */
 function reviewArtifactName(kind, reviewRound) {
+  if (kind === "fitness") {
+    return reviewRound === 1
+      ? "solution-fitness.json"
+      : `solution-fitness-${reviewRound}.json`;
+  }
   return reviewRound === 1
     ? `${kind}-review.json`
     : `${kind}-review-${reviewRound}.json`;
@@ -4879,12 +5191,23 @@ function reviewArtifactHashes(reviewRounds) {
     const expectedNames = [
       reviewArtifactName("quality", expectedRound),
       reviewArtifactName("spec", expectedRound),
+      ...(round?.fitness?.required === true
+        ? [reviewArtifactName("fitness", expectedRound)]
+        : []),
     ].sort();
     const artifacts = Array.isArray(round?.artifacts) ? round.artifacts : [];
     const actualNames = artifacts.map((artifact) => artifact?.name).sort();
     if (
       round?.round !== expectedRound ||
       !Array.isArray(round.findings) ||
+      (
+        round?.fitness !== undefined &&
+        (
+          round.fitness?.required !== true ||
+          !["PASS", "DEGRADED", "BLOCKED"].includes(round.fitness?.status) ||
+          typeof round.fitness?.codeFingerprint !== "string"
+        )
+      ) ||
       JSON.stringify(actualNames) !== JSON.stringify(expectedNames)
     ) {
       throw new Error("Review artifact history is not canonical.");
@@ -5036,7 +5359,8 @@ function isAllowedRunArtifactName(name) {
 
 /** @param {string} name */
 function isVersionedReviewArtifactName(name) {
-  return /^(?:spec|quality)-review-(?:[2-9]|[1-9][0-9]+)\.json$/u.test(name);
+  return /^(?:(?:spec|quality)-review|solution-fitness)-(?:[2-9]|[1-9][0-9]+)\.json$/u
+    .test(name);
 }
 
 /** @param {string} worktree @param {string} revision @param {string} artifactPath @param {Record<string, unknown>} expectedArtifacts */

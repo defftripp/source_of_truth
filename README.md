@@ -75,8 +75,10 @@ instrumental checks. Instrumental registry entries declare `requiredForFast`;
 every required `test`, `typecheck`, `build`, and `observed-behavior` check must
 be selected. STANDARD instead references research, Planner, Advisor, Worker,
 ticket-verification, Spec Review, Quality Review, and the full relevant
-instrumental checks. STANDARD checks may be inapplicable to FAST and therefore
-declare `requiredForFast: false`.
+instrumental checks. When a Solution Fitness trigger is active, it additionally
+references separate registered `fitness-version`, `fitness-documentation`, and
+`solution-fitness` commands. STANDARD checks may be inapplicable to FAST and
+therefore declare `requiredForFast: false`.
 
 Invocation output always includes the selected mode, deterministic hard floor,
 brief rationale, and evidence without requesting routine confirmation. FAST
@@ -175,6 +177,36 @@ match the last Application Core code state, and every ticket's non-superseded
 lease must still match its targeted evidence. Failing tests, typecheck, build,
 or observed behavior override a positive reviewer verdict. Missing reruns,
 stale evidence, or any instrumental failure blocks readiness.
+
+Solution Fitness is conditional, not routine ceremony. A planned request may
+declare an explicit `fitness.triggers` matrix for repository precedent,
+dependency API use, and substantial complexity. With all triggers false (or no
+Fitness request), the runtime invokes no provider and creates no Fitness
+artifact. With any trigger true, Root executes registered read-only providers
+in this exact order:
+
+1. detect the actually installed dependency version;
+2. obtain matching primary documentation, preferring Context7 for
+   version-sensitive evidence while accepting direct official documentation;
+3. compare local repository patterns, documented built-ins, viable
+   alternatives, measured complexity, and task fit;
+4. validate the evidence-backed verdict.
+
+Only the compact validated `solution-fitness.json` is durable. Provider payloads
+and command inputs stay transient. Documentation for another version,
+best-practice opinion without evidence, and any verdict without instrumental or
+primary-source support are rejected fail-closed. A low-risk dependency evidence
+gap is explicit `DEGRADED`. Context7 unavailability with sufficient official
+primary evidence is also `DEGRADED`; missing mandatory primary evidence for any
+high-risk trigger yields `BLOCKED`.
+
+An intentionally custom solution receives a blocking finding when matching
+primary documentation proves that the installed version has a simpler viable
+built-in. That finding becomes a bounded corrective ticket through the same
+loop as Spec and Quality findings. After correction, numbered Fitness, Spec,
+and Quality artifacts are regenerated against the new code fingerprint before
+full relevant verification. `PASS` and evidence-sufficient `DEGRADED` may reach
+`READY_FOR_HUMAN`; neither implies `ACCEPTED`, merge, or push.
 
 Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
 

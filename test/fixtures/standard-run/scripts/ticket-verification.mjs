@@ -10,6 +10,7 @@ const correctionExpectations = {
   "FINDING-1": ["src/message.mjs", "review correction: FINDING-1"],
   "FINDING-A": ["src/message.mjs", "review correction: FINDING-A"],
   "FINDING-B": ["src/audience.mjs", "review correction: FINDING-B"],
+  "FITNESS-ABSURD-1": ["src/message.mjs", "documented built-in: builtin-pipeline"],
 };
 const packetPath = process.env.ENGINEERING_CONTEXT_PACKET;
 assert.ok(packetPath);

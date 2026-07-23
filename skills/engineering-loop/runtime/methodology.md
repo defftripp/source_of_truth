@@ -57,6 +57,27 @@ must declare complete requirement coverage, concrete evidence, unverified
 areas, and blocking findings; a generic or empty PASS is invalid. Tests,
 typecheck, build, and observed behavior always outrank reviewer verdicts.
 
+Before those reviews, Root runs Solution Fitness only when an explicit trigger
+matrix records repository precedent, dependency API use, or substantial
+complexity. Ordinary local work has no Fitness artifact and invokes no Fitness
+provider. Triggered checks use three registered read-only commands in a fixed
+order: detect the actually installed dependency version, obtain matching
+primary documentation, then compare the solution with local patterns,
+documented built-ins, viable alternatives, measured complexity, and task fit.
+Context7 is the preferred provider for version-sensitive evidence; direct
+official documentation is also primary evidence. Provider I/O is transient and
+only the compact validated `solution-fitness.json` is durable.
+
+The deterministic Fitness contract performs no network calls. It rejects
+documentation for a different installed version, abstract best-practice claims,
+and any PASS, DEGRADED, or BLOCKED verdict unsupported by instrumental or
+primary-source evidence. A simpler viable built-in or an evidence-backed task
+misfit blocks an intentionally custom solution. A low-risk dependency evidence
+gap is explicit DEGRADED; missing mandatory primary evidence for any high-risk
+trigger blocks fail-closed. Context7 unavailability is DEGRADED when sufficient
+official primary evidence remains, including for high-risk work. DEGRADED never
+substitutes for missing mandatory high-risk evidence.
+
 Each blocking finding is mapped one-to-one to a bounded corrective Execution
 Ticket containing its immutable source finding, blockers, Write Lease, context,
 and targeted verification contract. Root appends those tickets to the same
@@ -67,11 +88,12 @@ eligibility contract independently proves disjoint leases, contracts, and
 worktrees. Original review artifacts remain byte-identical; graph review
 history links every finding to its corrective ticket.
 
-After the last correction, Root runs fresh Spec and Quality reviews again, then
-runs every full relevant instrumental check. Review and verification code
-fingerprints must both match the final Application Core after the last
-checkpoint; stale evidence is BLOCKED. A successful run creates a terminal
-evidence commit on the isolated Run Branch and stops at READY_FOR_HUMAN.
+After the last correction, Root reruns triggered Solution Fitness and fresh Spec
+and Quality reviews, then runs every full relevant instrumental check. Fitness,
+review, and verification code fingerprints must match the final Application
+Core after the last checkpoint; stale evidence is BLOCKED. A successful run
+creates a terminal evidence commit on the isolated Run Branch and stops at
+READY_FOR_HUMAN.
 
 DEEP is a hard floor for security, payments, destructive migrations, and other
 explicitly hard-to-reverse profiles. It extends this same planned-run state

@@ -163,6 +163,7 @@ export function validateImmutableReviewArtifacts(reviewRounds, actualHashes) {
  *   currentCodeFingerprint: string,
  *   fullVerification: Record<string, any> | null,
  *   executionCount: number,
+ *   fitnessRequired?: boolean,
  * }} input
  */
 export function validateReviewReleaseEvidence(input) {
@@ -185,6 +186,16 @@ export function validateReviewReleaseEvidence(input) {
       latest.reviews?.quality?.codeFingerprint !== input.currentCodeFingerprint
     ) {
       errors.push("latest Quality Review is stale");
+    }
+    if (
+      input.fitnessRequired === true &&
+      (
+        latest.fitness?.required !== true ||
+        !["PASS", "DEGRADED"].includes(latest.fitness?.status) ||
+        latest.fitness?.codeFingerprint !== input.currentCodeFingerprint
+      )
+    ) {
+      errors.push("latest Solution Fitness Check is stale");
     }
   }
 

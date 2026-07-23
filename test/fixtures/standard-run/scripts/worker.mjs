@@ -49,6 +49,12 @@ const corrections = {
     path: "src/audience.mjs",
     source: 'export const audience = "engineers";\n// review correction: FINDING-B\n',
   },
+  "FITNESS-ABSURD-1": {
+    lease: ["src/message.mjs"],
+    context: ["src/message.mjs", "test/message.test.mjs"],
+    path: "src/message.mjs",
+    source: 'export const message = "hello from STANDARD";\n// documented built-in: builtin-pipeline\n',
+  },
 };
 const slice = packet.sourceFinding
   ? corrections[/** @type {keyof typeof corrections} */ (packet.sourceFinding.id)]

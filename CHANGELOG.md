@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Run Solution Fitness only for explicit repository-precedent, dependency-API,
+  or substantial-complexity triggers; ordinary local work invokes no provider
+  and persists no Fitness artifact.
+- Enforce registered read-only provider ordering from installed-version
+  detection through version-matched primary documentation, evidence-bearing
+  comparison, and deterministic verdict validation without embedding network
+  calls in policy code.
+- Reject mismatched documentation and unsupported reviewer opinion, distinguish
+  evidence-sufficient Context7 degradation from missing high-risk evidence, and
+  route absurd custom solutions through corrective tickets followed by fresh
+  Fitness, dual reviews, and full verification.
 - Convert every blocking Spec or Quality review finding into one bounded
   corrective Execution Ticket linked in the existing durable graph, then run
   those tickets blockers-first through the shared Worker, targeted

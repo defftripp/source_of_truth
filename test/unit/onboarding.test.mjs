@@ -50,6 +50,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
       ".engineering/runtime/contracts.mjs",
       ".engineering/runtime/deep-contracts.mjs",
       ".engineering/runtime/engine.mjs",
+      ".engineering/runtime/fitness-contracts.mjs",
       ".engineering/runtime/manifest.json",
       ".engineering/runtime/methodology.md",
       ".engineering/runtime/mode-policy.mjs",

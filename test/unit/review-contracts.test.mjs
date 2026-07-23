@@ -213,6 +213,63 @@ test("fresh repeated reviews and full verification after correction are releasab
   assert.deepEqual(result, { valid: true, errors: [] });
 });
 
+test("stale required Solution Fitness evidence cannot release the run", () => {
+  const fingerprint = "c".repeat(64);
+  const result = validateReviewReleaseEvidence({
+    reviewRounds: [
+      reviewRound({
+        round: 2,
+        codeFingerprint: fingerprint,
+        fitness: {
+          required: true,
+          status: "PASS",
+          codeFingerprint: "b".repeat(64),
+        },
+      }),
+    ],
+    tickets: [],
+    currentCodeFingerprint: fingerprint,
+    fullVerification: {
+      status: "PASS",
+      codeFingerprint: fingerprint,
+      afterExecutionCount: 1,
+    },
+    executionCount: 1,
+    fitnessRequired: true,
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("latest Solution Fitness Check is stale"));
+});
+
+test("fresh DEGRADED Solution Fitness with fresh reviews and verification is releasable", () => {
+  const fingerprint = "c".repeat(64);
+  const result = validateReviewReleaseEvidence({
+    reviewRounds: [
+      reviewRound({
+        round: 1,
+        codeFingerprint: fingerprint,
+        fitness: {
+          required: true,
+          status: "DEGRADED",
+          codeFingerprint: fingerprint,
+        },
+      }),
+    ],
+    tickets: [],
+    currentCodeFingerprint: fingerprint,
+    fullVerification: {
+      status: "PASS",
+      codeFingerprint: fingerprint,
+      afterExecutionCount: 1,
+    },
+    executionCount: 1,
+    fitnessRequired: true,
+  });
+
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 /** @param {Record<string, any>[]} findings */
 function blockingReview(findings) {
   return {
@@ -252,12 +309,14 @@ function finding(overrides = {}) {
  *   round: number,
  *   findings?: Record<string, any>[],
  *   codeFingerprint?: string,
+ *   fitness?: Record<string, any>,
  * }} input
  */
 function reviewRound({
   round,
   findings = [],
   codeFingerprint = "c".repeat(64),
+  fitness,
 }) {
   return {
     round,
@@ -270,6 +329,7 @@ function reviewRound({
       spec: { status: "PASS", codeFingerprint },
       quality: { status: "PASS", codeFingerprint },
     },
+    ...(fitness ? { fitness } : {}),
     findings,
   };
 }
