@@ -58,6 +58,42 @@ export async function materializeCanonicalShellEntry(target, projectPath) {
   await writeFile(destination, await canonicalShellFileContent(projectPath));
 }
 
+export async function buildRuntimeUpgradeCandidate() {
+  const manifest = JSON.parse(
+    String(await canonicalShellFileContent(".engineering/runtime/manifest.json")),
+  );
+  const adoptionMatrix = JSON.parse(
+    String(
+      await canonicalShellFileContent(
+        ".engineering/runtime/upstream-adoption.json",
+      ),
+    ),
+  );
+  const files = [];
+  for (const entry of manifest.files) {
+    files.push({
+      path: entry.path,
+      content: await canonicalShellFileContent(entry.path),
+    });
+  }
+  return {
+    runtimeVersion: RUNTIME_VERSION,
+    manifest,
+    adoptionMatrix,
+    files,
+    projectState: JSON.parse(
+      String(await canonicalShellFileContent(".engineering/state/project.json")),
+    ),
+    verificationRegistry: JSON.parse(
+      String(
+        await canonicalShellFileContent(
+          ".engineering/verification/registry.json",
+        ),
+      ),
+    ),
+  };
+}
+
 /** @param {string} projectPath @returns {Promise<string | Buffer>} */
 async function canonicalShellFileContent(projectPath) {
   if (projectPath.endsWith("/.gitkeep")) {

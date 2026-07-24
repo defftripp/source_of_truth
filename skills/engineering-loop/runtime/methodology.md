@@ -188,3 +188,23 @@ left unchanged. Parallel timelines, worktree roots, eligibility reasons,
 targeted checks, checkpoints, and final verification ordering are durable run
 evidence. Protected Integration and Stable branches remain unchanged, and
 success still terminates at READY_FOR_HUMAN.
+
+## Project Runtime upgrade
+
+Runtime upgrade is a separate explicit launcher operation, never a phase inside
+an active feature Engineering Run. The launcher compares the committed
+installed runtime and Upstream Adoption Matrix with its own pinned candidate,
+validates every candidate checksum and provenance field, and runs compatibility
+plus the registered smoke in an isolated temporary Prepared Project before
+target mutation.
+
+Removal and ownership-boundary rewrites produce the shared canonical
+hash-bound Migration Manifest and stop at a Human Gate. An accepted
+non-conflicting or exactly approved upgrade writes only declared runtime and
+project-state paths, records a local checkpoint commit, and requires Doctor and
+smoke PASS afterward. Its external rollback journal contains only runtime/state
+bytes and restores them in a new checkpoint; Application Core paths, feature
+run state, global installations, remote refs, merges, and deployment are
+outside upgrade authority.
+Mutation fails closed when the platform lacks the trusted handle-pinned
+namespace transaction; read-only candidate inspection remains available.

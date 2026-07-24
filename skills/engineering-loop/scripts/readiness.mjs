@@ -13,12 +13,12 @@ const RUNTIME_MANIFEST_PATH = ".engineering/runtime/manifest.json";
 
 /**
  * @param {string[]} args
- * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair", dryRun: boolean, manifestPath?: string, approvedHash?: string, overridesPath?: string, rollbackToken?: string }}
+ * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair" | "upgrade" | "upgradeRollback", dryRun: boolean, manifestPath?: string, approvedHash?: string, overridesPath?: string, rollbackToken?: string }}
  */
 export function parseArguments(args) {
   let explicit = false;
   let target = process.cwd();
-  /** @type {"readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair"} */
+  /** @type {"readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair" | "upgrade" | "upgradeRollback"} */
   let operation = "readiness";
   let dryRun = false;
   let manifestPath;
@@ -54,6 +54,17 @@ export function parseArguments(args) {
       index += 1;
       continue;
     }
+    if (argument === "--upgrade-rollback") {
+      if (operation !== "readiness" || !args[index + 1]) {
+        throw new Error(
+          "--upgrade-rollback requires a token and cannot be combined with another operation",
+        );
+      }
+      operation = "upgradeRollback";
+      rollbackToken = args[index + 1];
+      index += 1;
+      continue;
+    }
     if (argument === "--approve-hash") {
       if (!args[index + 1]) {
         throw new Error("--approve-hash requires a SHA-256 hash");
@@ -75,7 +86,8 @@ export function parseArguments(args) {
       argument === "--normalize" ||
       argument === "--run" ||
       argument === "--doctor" ||
-      argument === "--repair"
+      argument === "--repair" ||
+      argument === "--upgrade"
     ) {
       if (operation !== "readiness") {
         throw new Error("Choose only one launcher operation.");
@@ -89,7 +101,9 @@ export function parseArguments(args) {
               ? "run"
               : argument === "--doctor"
                 ? "doctor"
-                : "repair";
+                : argument === "--repair"
+                  ? "repair"
+                  : "upgrade";
       continue;
     }
     if (argument === "--target") {
@@ -107,8 +121,8 @@ export function parseArguments(args) {
   if (operation === "apply" && (!manifestPath || !approvedHash)) {
     throw new Error("Apply requires --apply-manifest and --approve-hash");
   }
-  if (dryRun && operation !== "repair") {
-    throw new Error("--dry-run is valid only with --repair");
+  if (dryRun && !["repair", "upgrade"].includes(operation)) {
+    throw new Error("--dry-run is valid only with --repair or --upgrade");
   }
   return {
     explicit,
@@ -367,6 +381,32 @@ export async function main(args = process.argv.slice(2)) {
       options.operation === "doctor"
         ? await doctor.diagnoseRuntime(options.target)
         : await doctor.repairRuntime(options.target, { dryRun: options.dryRun });
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return report.status === "BLOCKED" ? 1 : 0;
+  }
+  if (options.operation === "upgrade") {
+    if (readiness.status !== "READY") {
+      process.stdout.write(`${JSON.stringify(readiness, null, 2)}\n`);
+      return readiness.status === "BLOCKED" ? 1 : 0;
+    }
+    const upgrade = await import(
+      new URL("../runtime/upgrade-contracts.mjs", import.meta.url).href
+    );
+    const report = await upgrade.upgradeRuntime(options.target, {
+      dryRun: options.dryRun,
+      approvedHash: options.approvedHash,
+    });
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return report.status === "BLOCKED" || report.status === "HUMAN_GATE" ? 1 : 0;
+  }
+  if (options.operation === "upgradeRollback") {
+    const upgrade = await import(
+      new URL("../runtime/upgrade-contracts.mjs", import.meta.url).href
+    );
+    const report = await upgrade.rollbackRuntimeUpgrade(
+      options.target,
+      options.rollbackToken ?? "",
+    );
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     return report.status === "BLOCKED" ? 1 : 0;
   }

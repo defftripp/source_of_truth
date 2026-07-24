@@ -1,8 +1,8 @@
 ---
 name: engineering-loop
-description: Explicit entrypoint for the Codex Engineering Loop. Probes readiness, diagnoses and safely repairs runtime drift, proposes and applies approved legacy normalization, prepares a new Target Project, and delegates Engineering Runs to its pinned project-local Runtime.
+description: Explicit entrypoint for the Codex Engineering Loop. Probes readiness, diagnoses and safely repairs runtime drift, upgrades a pinned Project Runtime through a separate verified transaction, proposes and applies approved legacy normalization, prepares a new Target Project, and delegates Engineering Runs to its pinned project-local Runtime.
 disable-model-invocation: true
-compatibility: Requires Node.js 20 or newer. Readiness, Doctor, normalization proposals, and repair dry-runs are read-only. Repair is explicitly invoked and supported by the V1 safe-replacement contract on Windows; unsupported platforms fail closed. Apply, rollback, and onboarding require explicit invocation and are cross-platform.
+compatibility: Requires Node.js 20 or newer. Readiness, Doctor, normalization proposals, repair previews, and upgrade previews are read-only. Repair is explicitly invoked and supported by the V1 safe-replacement contract on Windows; unsupported platforms fail closed. Upgrade, upgrade rollback, apply, normalization rollback, and onboarding require explicit invocation and are cross-platform.
 metadata:
   short-description: Explicit Codex Engineering Loop launcher
 ---
@@ -58,7 +58,23 @@ Do not infer invocation from a request that merely resembles engineering work.
     a checksum-matched Git source, and a link-free path confined to the Target
     Project. Safe replacement pins the destination namespace; unsupported
     platforms fail closed. Never turn a Human Gate into repair authority.
-11. If the status is `READY`, delegate the Engineering Run with `--run`:
+11. If the user explicitly requests a Project Runtime upgrade, preview the
+    launcher-owned pinned candidate with:
+
+    `node <skill-directory>/scripts/readiness.mjs --explicit --upgrade --dry-run --target <absolute-target-project>`
+
+    Upgrade is separate from every active Engineering Run. It validates the
+    installed runtime, candidate manifest and Upstream Adoption Matrix, then
+    runs candidate compatibility in isolation before any target mutation.
+    Rerun without `--dry-run` only after reviewing its evidence. If destructive
+    or protected scope produces a Human Gate, rerun with the exact returned
+    `--approve-hash <sha256>`; a missing or different hash cannot mutate.
+12. Preserve the successful upgrade rollback token. If the user explicitly
+    requests runtime rollback, use:
+
+    `node <skill-directory>/scripts/readiness.mjs --explicit --upgrade-rollback <upgrade-rollback-token> --target <absolute-target-project>`
+
+13. If the status is `READY`, delegate the Engineering Run with `--run`:
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --run --target <absolute-target-project>`
 
@@ -81,6 +97,10 @@ fail preflight.
   produced without mutation and is waiting at a Human Gate.
 - `NORMALIZATION_ROLLED_BACK` (exit `0`): the transaction token restored the
   pre-normalization project tree.
+- `HUMAN_GATE` (exit `1`): destructive or protected upgrade scope requires the
+  exact returned Migration Manifest hash; no mutation occurred.
+- `ROLLED_BACK` (exit `0`): the runtime upgrade token restored the prior pinned
+  runtime and project state without touching the Application Core.
 - `BLOCKED` (exit `1`): the target cannot be inspected safely, required
   evidence is insufficient, Remote Checkpoint Sync needs a Human Gate, or
   ownership forbids automatic repair.

@@ -108,6 +108,49 @@ STANDARD decision gates and DEEP Migration
 Manifest waiting/approval checkpoints are modeled explicitly; duplicate Run IDs
 are blocking evidence.
 
+## Managed Project Runtime upgrade
+
+Preview an upgrade from the installed pinned runtime to the runtime shipped
+beside the current Global Launcher:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --upgrade --dry-run --target <project>
+```
+
+The preview is read-only. It rejects active non-terminal Engineering Runs,
+validates the installed and candidate manifests plus Upstream Adoption
+Matrices, reports the exact version and provenance diff, and runs no feature
+work. A real upgrade reruns the same gates and executes the candidate smoke in
+an isolated temporary Prepared Project before target mutation:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --upgrade --target <project>
+```
+
+Removing a runtime path or overwriting a protected/local ownership boundary
+returns `HUMAN_GATE` with a canonical hash-bound Migration Manifest. Only the
+exact hash may authorize that scope:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --upgrade --approve-hash <sha256> --target <project>
+```
+
+A successful transaction writes only declared runtime/state paths, creates a
+local upgrade checkpoint commit, then requires a real Doctor result and
+registered smoke `PASS`. It returns an external rollback token. Rollback
+restores the prior runtime bytes and project state in a new local checkpoint
+without changing Application Core files:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --upgrade-rollback <upgrade-rollback-token> --target <project>
+```
+
+Upgrade never installs globally, starts a feature Engineering Run, pushes,
+merges, force-pushes, or deploys.
+Mutation fails closed unless the platform provides the handle-pinned namespace
+transaction (currently trusted System32 Windows PowerShell); preview remains
+read-only.
+
 ## Mode policy and FAST run contract
 
 The installed Project Runtime accepts an explicit project-relative run request:

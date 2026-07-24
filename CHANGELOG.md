@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an explicit managed Project Runtime upgrade/rollback flow that blocks
+  active feature runs, records the full pinned upstream diff, validates
+  candidate compatibility before mutation, and reruns Doctor plus smoke after
+  a local upgrade checkpoint.
+- Require an exact hash-bound Migration Manifest Human Gate for runtime removal
+  or protected/local ownership rewrites; preserve the prior runtime and project
+  state in a bounded external rollback journal without touching Application
+  Core, global installation, feature execution, push, merge, or deployment.
 - Add a read-only Runtime Doctor that distinguishes healthy Prepared Projects,
   missing or drifted runtime files, unfinished runs, and Remote Checkpoint Sync
   problems with READY, DEGRADED, or BLOCKED evidence.

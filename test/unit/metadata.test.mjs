@@ -40,5 +40,8 @@ test("engineering-loop is the only required entrypoint and cannot auto-invoke", 
   assert.match(source, /--apply-manifest/);
   assert.match(source, /--approve-hash/);
   assert.match(source, /--rollback/);
+  assert.match(source, /--upgrade/);
+  assert.match(source, /--upgrade-rollback/);
+  assert.match(source, /active Engineering Run/);
   assert.match(source, /Never apply a manifest whose approved hash/);
 });
