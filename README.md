@@ -30,8 +30,11 @@ runtime files, compact project state, verification registration, context, ADRs,
 specs, plans, tickets, and runs. Existing application files and framework-native
 layouts remain untouched.
 
-The Project Runtime manifest pins runtime `1.0.0` and SHA-256 hashes its owned
-files. The Upstream Adoption Matrix pins source revisions and checksums and
+The Project Runtime manifest schema `2` pins runtime `1.1.0`, SHA-256 hashes its
+files, and records the ownership/protection policy that authorizes repair.
+Legacy schema `1` / runtime `1.0.0` Prepared Projects remain diagnosable, but
+their manifests do not grant automatic repair authority. The Upstream Adoption
+Matrix pins source revisions and checksums and
 records license, adoption decision, local delta, compatibility evidence, and an
 upgrade procedure; adopted entries also identify the local artifact used for
 checksum recomputation. A successful onboarding delegates to the installed runtime's
@@ -44,6 +47,66 @@ node <installed-skill>/scripts/readiness.mjs --explicit --run --target <project>
 ```
 
 Replacing the Global Launcher does not replace that pinned runtime.
+
+## Runtime Doctor and repair
+
+Diagnose a Prepared Project without changing its tree:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --doctor --target <project>
+```
+
+Doctor validates the complete runtime manifest and ownership policy, recomputes
+runtime and adopted-upstream checksums, verifies Prepared Project state and the
+registered smoke check, and inspects non-terminal Run State Stores in every
+registered worktree. Its result is `READY`, `DEGRADED`, or `BLOCKED`, with
+per-file ownership, allowed repair action, durable frontier/checkpoint evidence,
+and a separate diagnosis for Remote Checkpoint Sync problems. Missing evidence
+never produces `READY`. The Global Launcher executes its own Doctor module and
+treats every Target Project runtime file as untrusted data; mutable Target
+Project code is never imported during diagnosis or repair.
+
+Preview an eligible repair without mutation, then request it explicitly:
+
+```text
+node <installed-skill>/scripts/readiness.mjs --explicit --repair --dry-run --target <project>
+node <installed-skill>/scripts/readiness.mjs --explicit --repair --target <project>
+```
+
+Automatic repair is limited to unprotected `PROJECT_RUNTIME` files that the
+manifest declares generated and whose ownership metadata matches the committed
+schema `2` `HEAD` manifest. Before any write, Doctor verifies that the destination and all
+ancestors remain inside the real Target Project without links, and that the
+declared `HEAD` Git blob deterministically materializes to the manifest
+checksum. On Windows, a trusted System32 helper pins the root and destination
+ancestors with native handles that deny rename/delete sharing, hashes the exact
+regular, non-reparse staging file handle after confirming its final path inside
+the staging root, and renames that same handle into the pinned destination
+namespace. The renamed handle remains pinned through post-repair path and
+checksum verification. Other platforms fail closed at a Human Gate because V1 has no
+equivalent exact-source and pinned-namespace replacement primitive. The exact
+Git HEAD and its committed ownership manifest are fixed
+and rechecked before mutation. Doctor writes only validated bytes and
+recomputes all evidence afterward. `USER_OWNED`, `LOCAL_OVERRIDE`, protected,
+missing-source, unsafe-path, and target Doctor files without trusted ownership remain
+byte-identical and stop at a Human Gate.
+Repair does not advance a run: an unfinished run keeps its durable frontier and
+the normal project-local Runtime resumes it without chat history. A resumable
+diagnosis additionally proves the deterministic execution order, required Run
+Artifact semantic contracts, committed immutable artifacts, and review hashes,
+plus the registered worktree branch, durable HEAD, and real checkpoint commits.
+Remote `PASS` evidence must also name the durable Human Gate commit when the
+frontier is a graphless decision or DEEP manifest gate.
+Terminal runs prove their committed READY_FOR_HUMAN state and result. A terminal
+sync failure remains a resumable Remote Sync Human Gate bound to that readiness
+commit. Future ticket contracts must match the latest durable checkpoint plan,
+so working-tree edits cannot invent a frontier.
+If a committed Human Gate, checkpoint, readiness, or terminal artifact proves
+Remote Sync was enabled, deleting the current sync artifact produces the
+blocking `REMOTE_SYNC_EVIDENCE_MISSING` diagnosis.
+STANDARD decision gates and DEEP Migration
+Manifest waiting/approval checkpoints are modeled explicitly; duplicate Run IDs
+are blocking evidence.
 
 ## Mode policy and FAST run contract
 
@@ -334,7 +397,8 @@ The launcher checks, without mutation:
 1. the Target Project is an accessible directory;
 2. `.engineering/` exists as a directory;
 3. `.engineering/runtime/manifest.json` is valid JSON declaring
-   `schemaVersion: 1` and a non-empty pinned `runtimeVersion`.
+   supported `schemaVersion: 1` or `schemaVersion: 2` and a non-empty pinned
+   `runtimeVersion`.
 
 An empty project returns `ONBOARDING_REQUIRED` with exit code `0` without
 mutation unless onboarding was explicitly selected.

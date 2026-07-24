@@ -13,13 +13,14 @@ const RUNTIME_MANIFEST_PATH = ".engineering/runtime/manifest.json";
 
 /**
  * @param {string[]} args
- * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run", manifestPath?: string, approvedHash?: string, overridesPath?: string, rollbackToken?: string }}
+ * @returns {{ explicit: boolean, target: string, operation: "readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair", dryRun: boolean, manifestPath?: string, approvedHash?: string, overridesPath?: string, rollbackToken?: string }}
  */
 export function parseArguments(args) {
   let explicit = false;
   let target = process.cwd();
-  /** @type {"readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run"} */
+  /** @type {"readiness" | "onboard" | "normalize" | "apply" | "rollback" | "run" | "doctor" | "repair"} */
   let operation = "readiness";
+  let dryRun = false;
   let manifestPath;
   let approvedHash;
   let overridesPath;
@@ -29,6 +30,10 @@ export function parseArguments(args) {
     const argument = args[index];
     if (argument === "--explicit") {
       explicit = true;
+      continue;
+    }
+    if (argument === "--dry-run") {
+      dryRun = true;
       continue;
     }
     if (argument === "--apply-manifest") {
@@ -65,12 +70,26 @@ export function parseArguments(args) {
       index += 1;
       continue;
     }
-    if (argument === "--onboard" || argument === "--normalize" || argument === "--run") {
+    if (
+      argument === "--onboard" ||
+      argument === "--normalize" ||
+      argument === "--run" ||
+      argument === "--doctor" ||
+      argument === "--repair"
+    ) {
       if (operation !== "readiness") {
         throw new Error("Choose only one launcher operation.");
       }
       operation =
-        argument === "--onboard" ? "onboard" : argument === "--normalize" ? "normalize" : "run";
+        argument === "--onboard"
+          ? "onboard"
+          : argument === "--normalize"
+            ? "normalize"
+            : argument === "--run"
+              ? "run"
+              : argument === "--doctor"
+                ? "doctor"
+                : "repair";
       continue;
     }
     if (argument === "--target") {
@@ -88,10 +107,14 @@ export function parseArguments(args) {
   if (operation === "apply" && (!manifestPath || !approvedHash)) {
     throw new Error("Apply requires --apply-manifest and --approve-hash");
   }
+  if (dryRun && operation !== "repair") {
+    throw new Error("--dry-run is valid only with --repair");
+  }
   return {
     explicit,
     target,
     operation,
+    dryRun,
     manifestPath,
     approvedHash,
     overridesPath,
@@ -217,7 +240,7 @@ export async function probeReadiness(targetInput) {
   const hasPinnedRuntime =
     manifest !== null &&
     typeof manifest === "object" &&
-    manifest.schemaVersion === 1 &&
+    [1, 2].includes(manifest.schemaVersion) &&
     typeof manifest.runtimeVersion === "string" &&
     manifest.runtimeVersion.trim().length > 0;
 
@@ -226,8 +249,8 @@ export async function probeReadiness(targetInput) {
     status: hasPinnedRuntime ? "PASS" : "INVALID",
     path: RUNTIME_MANIFEST_PATH,
     evidence: hasPinnedRuntime
-      ? `Pinned Project Runtime ${manifest.runtimeVersion} is declared with schema 1.`
-      : "Manifest must declare schemaVersion 1 and a non-empty runtimeVersion.",
+      ? `Pinned Project Runtime ${manifest.runtimeVersion} is declared with schema ${manifest.schemaVersion}.`
+      : "Manifest must declare schemaVersion 1 or 2 and a non-empty runtimeVersion.",
   });
 
   if (!hasControlPlane || !hasPinnedRuntime) {
@@ -336,6 +359,17 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   const readiness = await probeReadiness(options.target);
+  if (options.operation === "doctor" || options.operation === "repair") {
+    const doctor = await import(
+      new URL("../runtime/doctor-contracts.mjs", import.meta.url).href
+    );
+    const report =
+      options.operation === "doctor"
+        ? await doctor.diagnoseRuntime(options.target)
+        : await doctor.repairRuntime(options.target, { dryRun: options.dryRun });
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return report.status === "BLOCKED" ? 1 : 0;
+  }
   if (options.operation === "rollback") {
     const applyModule = await import(new URL("./apply.mjs", import.meta.url).href);
     const report = await applyModule.rollbackMigration(

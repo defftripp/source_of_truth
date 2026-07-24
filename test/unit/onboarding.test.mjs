@@ -32,7 +32,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
     assert.equal(result.stderr, "");
     const report = JSON.parse(result.stdout);
     assert.equal(report.status, "PREPARED_PROJECT");
-    assert.equal(report.runtimeVersion, "1.0.0");
+    assert.equal(report.runtimeVersion, "1.1.0");
     assert.equal(report.projectState, ".engineering/state/project.json");
     assert.equal(report.smoke.status, "PASS");
 
@@ -49,6 +49,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
       ".engineering/tickets/.gitkeep",
       ".engineering/runtime/contracts.mjs",
       ".engineering/runtime/deep-contracts.mjs",
+      ".engineering/runtime/doctor-contracts.mjs",
       ".engineering/runtime/engine.mjs",
       ".engineering/runtime/fitness-contracts.mjs",
       ".engineering/runtime/manifest.json",
@@ -67,7 +68,18 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
     const manifest = JSON.parse(
       await readFile(path.join(target, ".engineering", "runtime", "manifest.json"), "utf8"),
     );
+    assert.equal(manifest.schemaVersion, 2);
     assert.deepEqual(validateRuntimeManifest(manifest), { valid: true, errors: [] });
+    assert.ok(
+      manifest.files.every(
+        (/** @type {any} */ entry) =>
+          entry.ownership === "PROJECT_RUNTIME" &&
+          entry.generated === true &&
+          entry.protected === false &&
+          entry.repair?.kind === "git-blob" &&
+          entry.repair.revision === "HEAD",
+      ),
+    );
     assert.deepEqual(await verifyFileChecksums(target, manifest.files), {
       valid: true,
       errors: [],
@@ -102,7 +114,7 @@ test("Global Launcher onboards and delegates Engineering Runs to project-owned s
     const prepared = JSON.parse(onboarding.stdout);
     assert.equal(prepared.status, "PREPARED_PROJECT");
     assert.equal(prepared.delegated, true);
-    assert.equal(prepared.runtimeVersion, "1.0.0");
+    assert.equal(prepared.runtimeVersion, "1.1.0");
     assert.deepEqual(prepared.project, {
       status: "PREPARED_PROJECT",
       statePath: ".engineering/state/project.json",
@@ -171,7 +183,7 @@ test("replacement Global Launcher cannot replace an installed pinned runtime", a
     ]);
     assert.equal(run.code, 0, `${run.stdout}\n${run.stderr}`);
     const report = JSON.parse(run.stdout);
-    assert.equal(report.runtimeVersion, "1.0.0");
+    assert.equal(report.runtimeVersion, "1.1.0");
     assert.equal(report.status, "PREPARED_PROJECT");
     assert.deepEqual(await snapshotTree(installedRuntime), runtimeBefore);
   } finally {

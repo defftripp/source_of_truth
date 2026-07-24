@@ -51,6 +51,58 @@ Decision and remote-divergence pauses share the same durable Human Gate schema
 and non-terminal report contract. Remote sync retains its compatible blocker and
 sync evidence fields while exposing the same single-question structure.
 
+Runtime Doctor is a separate deterministic diagnosis/repair contract. Diagnosis
+and repair dry-run recompute manifest, ownership, checksum, Prepared Project,
+Run State Store, frontier, checkpoint, and Remote Checkpoint Sync evidence
+without mutation. READY requires complete evidence; repairable drift and a
+resumable unfinished run are DEGRADED; missing evidence, forbidden ownership,
+and sync Human Gates are BLOCKED.
+
+Runtime manifest schema 2 pins runtime 1.1.0 and carries the explicit
+ownership/protection policy required for automatic repair. Schema 1 / runtime
+1.0.0 Prepared Projects remain readable and may be READY when their legacy
+evidence is complete, but their missing ownership policy cannot authorize an
+automatic write.
+
+An explicit repair first validates every proposed write against the manifest.
+Only unprotected PROJECT_RUNTIME files declared generated may use the declared
+HEAD Git blob, the ownership metadata must match the committed HEAD manifest,
+and the deterministic materialized bytes must independently match the manifest
+SHA-256 before writing. Every destination ancestor must remain a real directory
+inside the Target Project. Replacement bytes are staged in a sibling directory
+whose filesystem device matches the Target Project; open handles pin every
+destination ancestor while manifest, path, and content identities are rechecked
+immediately before the rename, then path/checksum evidence is checked again
+afterward. On Windows, the trusted System32 helper keeps the root and ancestors
+pinned with native handles that deny rename/delete sharing, opens and hashes the
+exact regular, non-reparse staging file handle after confirming its final path
+inside the staging root, and renames that same handle into the pinned destination
+namespace. That renamed handle remains pinned until the post-repair path and
+checksum verification completes. The exact HEAD ownership contract is fixed and
+rechecked after pinning. Other platforms fail closed before mutation because the V1
+runtime does not expose an equivalent exact-source and pinned-namespace
+replacement primitive.
+USER_OWNED, LOCAL_OVERRIDE, protected, unsafe-path, and target Doctor files
+without trusted ownership are never executed or repaired automatically. The
+Global Launcher executes its own Doctor module instead of importing mutable
+Target Project code.
+Post-repair evidence is recomputed from disk. Repair never advances run state:
+the durable graph and checkpoint frontier remain owned by the normal resume
+lifecycle, which continues without chat history. Resumability requires the
+engine's deterministic execution order, required Run Artifact semantic
+contracts, committed immutable artifacts, review hashes, registered worktree
+branch, durable HEAD, and real ordered checkpoint commits. STANDARD decision
+gates and DEEP Migration Manifest
+waiting/approval checkpoints remain resumable; duplicate Run IDs are blocking
+evidence. Remote PASS for either Human Gate also proves the durable gate commit,
+not only the preceding ticket checkpoint list. Terminal runs prove their
+readiness commit, state, and result; terminal sync failures keep that commit as
+the resumable Remote Sync frontier. Immutable ticket contracts in the working
+graph must match the latest durable checkpoint graph.
+When a durable Human Gate, checkpoint, readiness, or terminal artifact proves
+Remote Sync was enabled, the corresponding current `remote-sync.json` is
+required; absence is a blocking sync problem.
+
 Once the graph is complete, Root executes Spec Review and Quality Review in
 separate fresh read-only contexts with different role packets. Every result
 must declare complete requirement coverage, concrete evidence, unverified

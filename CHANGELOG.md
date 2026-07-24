@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Add a read-only Runtime Doctor that distinguishes healthy Prepared Projects,
+  missing or drifted runtime files, unfinished runs, and Remote Checkpoint Sync
+  problems with READY, DEGRADED, or BLOCKED evidence.
+- Add explicit repair dry-run and policy-validated repair for unprotected
+  manifest-owned generated files using checksum-matched Git blobs; preserve
+  protected, user-owned, and local-override contents behind Human Gates.
+- Preserve durable checkpoints and deterministic frontiers through repair, then
+  resume interrupted STANDARD work without chat history; reject missing
+  evidence fail-closed.
+- Introduce runtime manifest schema 2 / runtime 1.1.0 for explicit repair
+  ownership while retaining read-only Doctor compatibility with complete legacy
+  schema 1 / runtime 1.0.0 Prepared Projects.
+- Bind automatic ownership to the committed manifest, confine repair paths
+  against links and root escape, and require real Git/artifact proof before
+  reporting an unfinished run as resumable.
+- Execute the launcher-owned Doctor module without importing Target Project code,
+  validate Run Artifact contracts/review hashes and DEEP manifest gates, and
+  bind Remote Sync blockers to the durable local head.
+- Fail closed on malformed graph/state evidence, require semantic and committed
+  artifact proof, prove Human Gate remote sync separately, and pin the Target
+  root plus same-volume repair ancestors across handle-safe replacement.
+- Bind future ticket contracts to the latest durable checkpoint plan, validate
+  terminal readiness and terminal Remote Sync gates, reject hidden Run Store
+  entries, and bind DEEP manifests to their canonical approved hash.
+- Pin repair authorization to one committed HEAD ownership contract and use a
+  trusted Windows helper that pins deny-delete directory handles, validates the
+  exact regular non-reparse staging handle and final path, and keeps the renamed
+  handle pinned through post-repair verification.
+- Require current Remote Sync evidence whenever a durable Human Gate,
+  checkpoint, readiness, or terminal artifact proves sync was enabled; missing
+  evidence remains BLOCKED.
 - Run Solution Fitness only for explicit repository-precedent, dependency-API,
   or substantial-complexity triggers; ordinary local work invokes no provider
   and persists no Fitness artifact.

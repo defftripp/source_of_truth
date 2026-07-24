@@ -72,14 +72,79 @@ test("Upstream Adoption Matrix rejects a moving revision", () => {
 
 test("runtime manifest requires a pinned version and checksummed owned files", () => {
   const manifest = {
-    schemaVersion: 1,
-    runtimeVersion: "1.0.0",
-    files: [{ path: ".engineering/runtime/engine.mjs", sha256: "b".repeat(64) }],
+    schemaVersion: 2,
+    runtimeVersion: "1.1.0",
+    files: [
+      {
+        path: ".engineering/runtime/engine.mjs",
+        sha256: "b".repeat(64),
+        ownership: "PROJECT_RUNTIME",
+        generated: true,
+        protected: false,
+        repair: { kind: "git-blob", revision: "HEAD" },
+      },
+    ],
   };
   assert.deepEqual(validateRuntimeManifest(manifest), { valid: true, errors: [] });
   assert.equal(validateRuntimeManifest({ ...manifest, runtimeVersion: "" }).valid, false);
   assert.equal(validateRuntimeManifest({ ...manifest, runtimeVersion: "latest" }).valid, false);
   assert.equal(validateRuntimeManifest({ ...manifest, files: [] }).valid, false);
+  assert.equal(
+    validateRuntimeManifest({
+      ...manifest,
+      files: [{ ...manifest.files[0], ownership: undefined }],
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateRuntimeManifest({
+      ...manifest,
+      files: [{ ...manifest.files[0], ownership: "USER_OWNED" }],
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateRuntimeManifest({
+      ...manifest,
+      files: [{ ...manifest.files[0], path: ".engineering\\runtime\\engine.mjs" }],
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateRuntimeManifest({
+      ...manifest,
+      files: [{ ...manifest.files[0], path: "README.md" }],
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateRuntimeManifest({
+      ...manifest,
+      files: [
+        manifest.files[0],
+        { ...manifest.files[0], path: ".engineering/runtime/ENGINE.mjs" },
+      ],
+    }).valid,
+    false,
+  );
+  const legacyManifest = {
+    schemaVersion: 1,
+    runtimeVersion: "1.0.0",
+    files: [
+      {
+        path: ".engineering/runtime/engine.mjs",
+        sha256: "c".repeat(64),
+      },
+    ],
+  };
+  assert.deepEqual(validateRuntimeManifest(legacyManifest), { valid: true, errors: [] });
+  assert.equal(
+    validateRuntimeManifest({
+      ...legacyManifest,
+      files: [{ ...legacyManifest.files[0], ownership: "PROJECT_RUNTIME" }],
+    }).valid,
+    false,
+  );
 });
 
 test("file checksum recomputation detects runtime drift", async () => {

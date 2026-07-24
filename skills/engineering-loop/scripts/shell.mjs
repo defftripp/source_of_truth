@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sha256 } from "../runtime/contracts.mjs";
 
-export const RUNTIME_VERSION = "1.0.0";
+export const RUNTIME_VERSION = "1.1.0";
 
 export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering",
@@ -19,6 +19,7 @@ export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering/runtime",
   ".engineering/runtime/contracts.mjs",
   ".engineering/runtime/deep-contracts.mjs",
+  ".engineering/runtime/doctor-contracts.mjs",
   ".engineering/runtime/engine.mjs",
   ".engineering/runtime/fitness-contracts.mjs",
   ".engineering/runtime/manifest.json",
@@ -87,6 +88,7 @@ async function canonicalShellFileContent(projectPath) {
     const ownedFiles = [
       "runtime/contracts.mjs",
       "runtime/deep-contracts.mjs",
+      "runtime/doctor-contracts.mjs",
       "runtime/engine.mjs",
       "runtime/fitness-contracts.mjs",
       "runtime/methodology.md",
@@ -100,9 +102,13 @@ async function canonicalShellFileContent(projectPath) {
       files.push({
         path: `.engineering/${relativePath}`,
         sha256: sha256(await canonicalShellFileContent(`.engineering/${relativePath}`)),
+        ownership: "PROJECT_RUNTIME",
+        generated: true,
+        protected: false,
+        repair: { kind: "git-blob", revision: "HEAD" },
       });
     }
-    return json({ schemaVersion: 1, runtimeVersion: RUNTIME_VERSION, files });
+    return json({ schemaVersion: 2, runtimeVersion: RUNTIME_VERSION, files });
   }
   if (projectPath.startsWith(".engineering/runtime/")) {
     return readFile(path.join(SOURCE_ROOT, ...projectPath.replace(".engineering/", "").split("/")));

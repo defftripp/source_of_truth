@@ -29,6 +29,11 @@ export const MIGRATION_OWNERS = Object.freeze([
 ]);
 /** @type {readonly MigrationRisk[]} */
 export const MIGRATION_RISKS = Object.freeze(["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+export const RUNTIME_FILE_OWNERS = Object.freeze([
+  "PROJECT_RUNTIME",
+  "USER_OWNED",
+  "LOCAL_OVERRIDE",
+]);
 const DESTRUCTIVE_MIGRATION_ACTIONS = new Set(["MOVE", "REWRITE", "DELETE"]);
 
 const MATRIX_ENTRY_FIELDS = Object.freeze([
@@ -119,9 +124,10 @@ export function validateRuntimeManifest(manifest) {
     return { valid: false, errors: ["manifest must be an object"] };
   }
   const candidate = /** @type {JsonObject} */ (manifest);
-  if (candidate.schemaVersion !== 1) {
-    errors.push("schemaVersion must equal 1");
+  if (![1, 2].includes(/** @type {number} */ (candidate.schemaVersion))) {
+    errors.push("schemaVersion must equal 1 or 2");
   }
+  const ownershipSchema = candidate.schemaVersion === 2;
   if (
     !isNonEmptyString(candidate.runtimeVersion) ||
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(candidate.runtimeVersion)
@@ -132,6 +138,7 @@ export function validateRuntimeManifest(manifest) {
     errors.push("files must be a non-empty array");
     return { valid: false, errors };
   }
+  const filePaths = new Set();
   candidate.files.forEach((file, index) => {
     if (!file || typeof file !== "object") {
       errors.push(`files[${index}] must be an object`);
@@ -140,11 +147,14 @@ export function validateRuntimeManifest(manifest) {
     const candidateFile = /** @type {JsonObject} */ (file);
     if (!isNonEmptyString(candidateFile.path)) {
       errors.push(`files[${index}].path must be a non-empty string`);
-    } else if (
-      path.isAbsolute(candidateFile.path) ||
-      candidateFile.path.split(/[\\/]/u).includes("..")
-    ) {
-      errors.push(`files[${index}].path must stay within the Target Project`);
+    } else if (!isCanonicalRuntimeFilePath(candidateFile.path)) {
+      errors.push(
+        `files[${index}].path must be a canonical .engineering/runtime project path`,
+      );
+    } else if (filePaths.has(candidateFile.path.toLowerCase())) {
+      errors.push(`files[${index}].path must be portable and unique`);
+    } else {
+      filePaths.add(candidateFile.path.toLowerCase());
     }
     if (
       !isNonEmptyString(candidateFile.sha256) ||
@@ -152,8 +162,65 @@ export function validateRuntimeManifest(manifest) {
     ) {
       errors.push(`files[${index}].sha256 must be a SHA-256 digest`);
     }
+    if (!ownershipSchema) {
+      for (const field of ["ownership", "generated", "protected", "repair"]) {
+        if (candidateFile[field] !== undefined) {
+          errors.push(`files[${index}].${field} is not supported by legacy schemaVersion 1`);
+        }
+      }
+    } else {
+      if (
+        !isNonEmptyString(candidateFile.ownership) ||
+        !RUNTIME_FILE_OWNERS.includes(candidateFile.ownership)
+      ) {
+        errors.push(`files[${index}].ownership must be a supported runtime file owner`);
+      }
+      if (typeof candidateFile.generated !== "boolean") {
+        errors.push(`files[${index}].generated must be boolean`);
+      }
+      if (typeof candidateFile.protected !== "boolean") {
+        errors.push(`files[${index}].protected must be boolean`);
+      }
+      if (candidateFile.repair !== undefined) {
+        if (
+          !candidateFile.repair ||
+          typeof candidateFile.repair !== "object" ||
+          Array.isArray(candidateFile.repair) ||
+          /** @type {JsonObject} */ (candidateFile.repair).kind !== "git-blob" ||
+          /** @type {JsonObject} */ (candidateFile.repair).revision !== "HEAD"
+        ) {
+          errors.push(`files[${index}].repair must declare the HEAD Git blob source`);
+        }
+        if (
+          candidateFile.ownership !== "PROJECT_RUNTIME" ||
+          candidateFile.generated !== true ||
+          candidateFile.protected !== false
+        ) {
+          errors.push(
+            `files[${index}].repair requires an unprotected PROJECT_RUNTIME generated file`,
+          );
+        }
+      }
+    }
   });
   return { valid: errors.length === 0, errors };
+}
+
+/** @param {unknown} value @returns {value is string} */
+function isCanonicalRuntimeFilePath(value) {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+  const segments = value.split("/");
+  return (
+    value === value.replaceAll("\\", "/") &&
+    !path.posix.isAbsolute(value) &&
+    !/^[A-Za-z]:/u.test(value) &&
+    path.posix.normalize(value) === value &&
+    value.startsWith(".engineering/runtime/") &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..") &&
+    !/[\u0000-\u001f]/u.test(value)
+  );
 }
 
 /** @param {unknown} manifest */
