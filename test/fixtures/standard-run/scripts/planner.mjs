@@ -1,5 +1,11 @@
 const variant = process.argv[2] ?? "one";
 const observedBehavior = variant === "stale-mutation" ? "stale-mutation" : "observed-behavior";
+const ticketVerification =
+  variant === "verification-scope"
+    ? "leaky-ticket-verification"
+    : variant === "verification-lease"
+      ? "mutating-ticket-verification"
+    : "ticket-message-test";
 const tickets = variant === "graph"
   ? [
       {
@@ -35,7 +41,7 @@ const tickets = variant === "graph"
         id: "TICKET-1",
         objective: "Deliver the public STANDARD message behavior end to end.",
         acceptanceCriteria: ["AC-1"],
-        verificationIds: ["ticket-message-test", observedBehavior],
+        verificationIds: [ticketVerification, observedBehavior],
         dependencies: [],
         writeLease: ["src/message.mjs"],
         contextPaths: ["src/message.mjs", "test/message.test.mjs"],

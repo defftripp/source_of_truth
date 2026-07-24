@@ -1721,11 +1721,15 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
   const reviewEvidence = expectedReviewArtifactHashes(graph.reviewRounds ?? []);
   errors.push(...reviewEvidence.errors);
   const expectsCorrectiveWork = graphHasCorrectiveReviewLinks(graph);
+  const workerRejection = await tryReadJson(path.join(runRoot, "worker-rejection.json"));
+  const hasWorkerRejection =
+    workerRejection?.kind === "WORKER_CONTRACT_REJECTION";
   const allowedNames = new Set([
     ...requiredNames,
     ...(state.mode === "STANDARD" ? ["advisor-rounds.json"] : []),
     ...reviewEvidence.hashes.keys(),
     ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
+    ...(hasWorkerRejection ? ["worker-rejection.json"] : []),
     "human-gate.json",
     "remote-sync.json",
     "result.json",
@@ -1753,6 +1757,9 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
   if (actualNames.includes("corrective-work.json") !== expectsCorrectiveWork) {
     errors.push("Run corrective-work artifact does not match graph history");
   }
+  if (actualNames.includes("worker-rejection.json") !== hasWorkerRejection) {
+    errors.push("Run Worker rejection artifact does not match terminal evidence");
+  }
   for (const entry of entries) {
     if (!entry.isFile() || !allowedNames.has(entry.name)) {
       errors.push(`Run Artifact set contains an unsafe or unknown entry: ${entry.name}`);
@@ -1779,6 +1786,12 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
         !correctiveWorkMatchesGraph(graph, value)
       ) {
         errors.push("Run corrective-work links do not match graph history");
+      }
+      if (
+        entry.name === "worker-rejection.json" &&
+        !workerRejectionMatchesGraph(graph, value, durableRevision)
+      ) {
+        errors.push("Run Worker rejection evidence does not match accepted durable HEAD");
       }
       if (entry.name === "advisor-rounds.json") {
         errors.push(
@@ -1904,6 +1917,57 @@ function correctiveWorkMatchesGraph(graph, value) {
   return (
     latestRound?.findings?.length === 0 &&
     correctiveWork.completedAfterReviewRound === latestRound.round
+  );
+}
+
+/**
+ * @param {Record<string, any>} graph
+ * @param {unknown} value
+ * @param {string | null} durableRevision
+ */
+function workerRejectionMatchesGraph(graph, value, durableRevision) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const rejection = /** @type {Record<string, any>} */ (value);
+  const ticketIds = new Set(
+    (graph.tickets ?? []).map((/** @type {any} */ ticket) => ticket?.id),
+  );
+  return (
+    JSON.stringify(Object.keys(rejection).sort()) ===
+      JSON.stringify([
+        "acceptedIntegration",
+        "kind",
+        "reason",
+        "schemaVersion",
+        "silentMerge",
+        "sourceTicketIds",
+        "status",
+      ]) &&
+    rejection.schemaVersion === 1 &&
+    rejection.kind === "WORKER_CONTRACT_REJECTION" &&
+    rejection.status === "BLOCKED" &&
+    rejection.silentMerge === false &&
+    isNonEmptyStringArray(rejection.sourceTicketIds) &&
+    rejection.sourceTicketIds.every(
+      (/** @type {string} */ ticketId) => ticketIds.has(ticketId),
+    ) &&
+    rejection.reason &&
+    JSON.stringify(Object.keys(rejection.reason).sort()) ===
+      JSON.stringify(["checkId", "detail", "evidenceIds"]) &&
+    isEvidenceId(rejection.reason.checkId) &&
+    typeof rejection.reason.detail === "string" &&
+    rejection.reason.detail.length > 0 &&
+    rejection.reason.detail.length <= 512 &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(rejection.reason.detail) &&
+    isNonEmptyStringArray(rejection.reason.evidenceIds) &&
+    rejection.reason.evidenceIds.every(isEvidenceId) &&
+    rejection.acceptedIntegration &&
+    JSON.stringify(Object.keys(rejection.acceptedIntegration).sort()) ===
+      JSON.stringify(["changed", "head"]) &&
+    /^[a-f0-9]{40}$/u.test(rejection.acceptedIntegration.head) &&
+    rejection.acceptedIntegration.head === durableRevision &&
+    rejection.acceptedIntegration.changed === false
   );
 }
 

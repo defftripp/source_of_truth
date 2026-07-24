@@ -60,6 +60,7 @@ const RUN_ARTIFACT_FILES = new Set([
   "ticket.json",
   "ticket-graph.json",
   "verification.json",
+  "worker-rejection.json",
 ]);
 const STANDARD_CHECKPOINT_ARTIFACT_FILES = Object.freeze([
   "advisor.json",
@@ -1286,6 +1287,7 @@ async function runStandardTask(target, prepared, request) {
               frontier.map((candidate) => candidate.id),
               parallelBatch.failure.checkId,
               parallelBatch.failure.detail,
+              parallelBatch.failure.evidenceIds,
             );
           }
           const batchPreflight = await validateParallelResultsAgainstAcceptedState(
@@ -1370,6 +1372,17 @@ async function runStandardTask(target, prepared, request) {
       const preWorkerChanges = new Map(
         (await workingTreeFingerprint(worktree, ticketBase)).map((entry) => [entry.path, entry.hash]),
       );
+      const unrelatedDirtyPath = [...preWorkerChanges.keys()].find(
+        (changedPath) => !changedPath.startsWith(`${artifactPath}/`),
+      );
+      if (unrelatedDirtyPath) {
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "worker-unrelated-dirty-state",
+          "Accepted Worker worktree contained unrelated dirty state before execution.",
+        );
+      }
       let workerExecution;
       if (parallelResult) {
         const integration = await integrateIsolatedWorkerResult(context, parallelResult);
@@ -1404,68 +1417,89 @@ async function runStandardTask(target, prepared, request) {
           });
         }
       }
+      const workerChanges = (await workingTreeFingerprint(worktree, ticketBase))
+        .filter((entry) => preWorkerChanges.get(entry.path) !== entry.hash)
+        .map((entry) => entry.path);
+      const workerApplicationChanges = workerChanges.filter(
+        (changedPath) => !changedPath.startsWith(`${artifactPath}/`),
+      );
       if (workerExecution.blocked) {
-        if (mode === "DEEP") {
-          await restorePathsToCommit(worktree, ticketBase, ticket.writeLease);
-          return blockCorrectiveWorkerResult(
-            context,
-            [ticket.id],
-            workerExecution.blocked.failure?.checkId ?? "worker-authority",
-            "Worker attempted a forbidden commit or integration action.",
-          );
-        }
-        return workerExecution.blocked;
-      }
-      if (workerExecution.result.exitCode !== 0) {
-        return blockStandardAfterCommand(
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
           context,
-          "IMPLEMENTING",
-          commands.worker,
-          workerExecution.result,
+          [ticket.id],
+          workerExecution.blocked.failure?.checkId ?? "worker-authority",
+          "Worker attempted a forbidden commit or integration action.",
         );
       }
-      let workerVerification;
+      if (workerExecution.result.exitCode !== 0) {
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          commands.worker.id,
+          "Worker command exited without a complete, acceptable result.",
+        );
+      }
+      let workerResult;
       try {
-        workerVerification = parseWorkerVerification(
+        workerResult = parseWorkerResult(
           workerExecution.result.stdout,
           commands.ticketVerification.id,
         );
       } catch {
-        return blockStandardSchema(context, "IMPLEMENTING", "worker-contract");
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "worker-contract",
+          "Worker returned an invalid bounded result contract.",
+        );
+      }
+      if (workerResult.status === "BLOCKED") {
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          workerResult.checkId,
+          workerResult.detail,
+          workerResult.evidenceIds,
+        );
       }
       verification.checks.push({
-        ...workerVerification,
+        ...workerResult.verification,
         ticketId: ticket.id,
         attempt: ticket.attempts,
         phase: "WORKER_SELF_CHECK",
         sequence: verification.checks.length + 1,
       });
-      const workerChanges = (await workingTreeFingerprint(worktree, ticketBase))
-        .filter((entry) => preWorkerChanges.get(entry.path) !== entry.hash)
-        .map((entry) => entry.path);
       const workerScopeLeak = workerChanges.find(
         (changedPath) =>
           !ticket.writeLease.includes(changedPath) && !changedPath.startsWith(`${artifactPath}/`),
       );
       if (workerScopeLeak) {
-        if (mode === "DEEP") {
-          await restorePathsToCommit(
-            worktree,
-            ticketBase,
-            workerChanges.filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`)),
-          );
-          return blockCorrectiveWorkerResult(
-            context,
-            [ticket.id],
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "worker-result-conflict",
+          "Worker result changed content outside its Write Lease.",
+          [
             "worker-result-conflict",
-            `Worker result escaped its Write Lease at ${workerScopeLeak}.`,
-          );
-        }
-        return blockStandardSchema(context, "IMPLEMENTING", "write-lease");
+            `worker-path-${sha256(workerScopeLeak).slice(0, 16)}`,
+          ],
+        );
       }
       if (!workerChanges.some((changedPath) => ticket.writeLease.includes(changedPath))) {
-        return blockStandardSchema(context, "IMPLEMENTING", "vertical-ticket-change");
+        await restorePathsToCommit(worktree, ticketBase, workerApplicationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "vertical-ticket-change",
+          "Worker produced no complete change inside its Write Lease.",
+        );
       }
+      const acceptedWorkerLease = await leaseFingerprint(worktree, ticket.writeLease);
 
       transitionState(stateHistory, "TICKET_VERIFICATION");
       const ticketExecution = await executeRunCommand(
@@ -1475,7 +1509,16 @@ async function runStandardTask(target, prepared, request) {
         { ENGINEERING_CONTEXT_PACKET: contextPacketPath },
       );
       if (ticketExecution.blocked) {
-        return ticketExecution.blocked;
+        const verificationChanges = (await workingTreeFingerprint(worktree, ticketBase))
+          .map((entry) => entry.path)
+          .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+        await restorePathsToCommit(worktree, ticketBase, verificationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          ticketExecution.blocked.failure?.checkId ?? "worker-targeted-verification",
+          "Targeted verification violated the bounded Worker contract.",
+        );
       }
       const pendingPreflight = await validateParallelResultsAgainstAcceptedState(
         context,
@@ -1501,6 +1544,19 @@ async function runStandardTask(target, prepared, request) {
           pendingPreflight.detail ?? "Pending Worker result diverged before checkpoint.",
         );
       }
+      const verifiedWorkerLease = await leaseFingerprint(worktree, ticket.writeLease);
+      if (JSON.stringify(verifiedWorkerLease) !== JSON.stringify(acceptedWorkerLease)) {
+        const verificationChanges = (await workingTreeFingerprint(worktree, ticketBase))
+          .map((entry) => entry.path)
+          .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+        await restorePathsToCommit(worktree, ticketBase, verificationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "verification-freshness",
+          "Targeted verification changed accepted Worker content.",
+        );
+      }
       const ticketEvidence = {
         ...commandEvidence(commands.ticketVerification, ticketExecution.result),
         ticketId: ticket.id,
@@ -1508,24 +1564,56 @@ async function runStandardTask(target, prepared, request) {
         phase: "TARGETED_VERIFICATION",
         sequence: verification.checks.length + 1,
         verifiedAtEpochSeconds: Math.floor(Date.now() / 1000),
-        observedLease: await leaseFingerprint(worktree, ticket.writeLease),
+        observedLease: acceptedWorkerLease,
       };
       verification.checks.push(ticketEvidence);
       ticket.verification = ticketEvidence;
       await writeJson(path.join(artifactRoot, "verification.json"), verification);
       if (ticketExecution.result.exitCode !== 0) {
-        return blockStandardAfterCommand(
+        const verificationChanges = (await workingTreeFingerprint(worktree, ticketBase))
+          .map((entry) => entry.path)
+          .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+        await restorePathsToCommit(worktree, ticketBase, verificationChanges);
+        return blockCorrectiveWorkerResult(
           context,
-          "TICKET_VERIFICATION",
-          commands.ticketVerification,
-          ticketExecution.result,
+          [ticket.id],
+          commands.ticketVerification.id,
+          "Targeted verification failed for the Worker result.",
+        );
+      }
+      const postVerificationChanges = (await workingTreeFingerprint(worktree, ticketBase))
+        .map((entry) => entry.path)
+        .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+      const verificationScopeLeak = postVerificationChanges.find(
+        (changedPath) => !ticket.writeLease.includes(changedPath),
+      );
+      if (verificationScopeLeak) {
+        await restorePathsToCommit(worktree, ticketBase, postVerificationChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "worker-result-conflict",
+          "Targeted verification changed content outside the Worker Write Lease.",
+          [
+            "worker-result-conflict",
+            `worker-path-${sha256(verificationScopeLeak).slice(0, 16)}`,
+          ],
         );
       }
       if (
         JSON.stringify(ticketEvidence.observedLease) !==
         JSON.stringify(await leaseFingerprint(worktree, ticket.writeLease))
       ) {
-        return blockStandardSchema(context, "TICKET_VERIFICATION", "verification-freshness");
+        const staleChanges = (await workingTreeFingerprint(worktree, ticketBase))
+          .map((entry) => entry.path)
+          .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+        await restorePathsToCommit(worktree, ticketBase, staleChanges);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "verification-freshness",
+          "Targeted verification evidence became stale before checkpoint.",
+        );
       }
 
       transitionState(stateHistory, "CHECKPOINT");
@@ -1564,6 +1652,22 @@ async function runStandardTask(target, prepared, request) {
       await validateRunArtifacts(artifactRoot, checkpointArtifacts);
       await git(worktree, ["add", "--all"]);
       await validateGitArtifacts(worktree, "index", artifactPath, checkpointArtifacts);
+      const stagedLease = await leaseFingerprintFromIndex(worktree, ticket.writeLease);
+      if (
+        JSON.stringify(stagedLease) !==
+        JSON.stringify(ticketEvidence.observedLease)
+      ) {
+        const stalePaths = (await workingTreeFingerprint(worktree, ticketBase))
+          .map((entry) => entry.path)
+          .filter((changedPath) => !changedPath.startsWith(`${artifactPath}/`));
+        await restorePathsToCommit(worktree, ticketBase, stalePaths);
+        return blockCorrectiveWorkerResult(
+          context,
+          [ticket.id],
+          "verification-freshness",
+          "Staged Worker content differs from fresh targeted verification evidence.",
+        );
+      }
       await validateLeasedIndex(worktree, ticket.writeLease);
       const checkpointTree = await git(worktree, ["write-tree"]);
       if (
@@ -2306,8 +2410,12 @@ async function executeParallelWorkerBatch(
             },
           };
         }
+        let workerResult;
         try {
-          parseWorkerVerification(execution.result.stdout, commands.ticketVerification.id);
+          workerResult = parseWorkerResult(
+            execution.result.stdout,
+            commands.ticketVerification.id,
+          );
         } catch {
           timeline.status = "BLOCKED";
           return {
@@ -2315,6 +2423,17 @@ async function executeParallelWorkerBatch(
             failure: {
               checkId: "worker-contract",
               detail: `Worker ${ticket.id} returned an invalid result contract.`,
+            },
+          };
+        }
+        if (workerResult.status === "BLOCKED") {
+          timeline.status = "BLOCKED";
+          return {
+            timeline,
+            failure: {
+              checkId: workerResult.checkId,
+              detail: workerResult.detail,
+              evidenceIds: workerResult.evidenceIds,
             },
           };
         }
@@ -2340,7 +2459,11 @@ async function executeParallelWorkerBatch(
             timeline,
             failure: {
               checkId: "worker-result-conflict",
-              detail: `Worker ${ticket.id} escaped its Write Lease at ${escapedPath}.`,
+              detail: `Worker ${ticket.id} changed content outside its Write Lease.`,
+              evidenceIds: [
+                "worker-result-conflict",
+                `worker-path-${sha256(escapedPath).slice(0, 16)}`,
+              ],
             },
           };
         }
@@ -2463,15 +2586,26 @@ async function integrateIsolatedWorkerResult(context, workerResult) {
  * @param {string[]} ticketIds
  * @param {string} checkId
  * @param {string} detail
+ * @param {string[]} [evidenceIds]
  */
-async function blockCorrectiveWorkerResult(context, ticketIds, checkId, detail) {
+async function blockCorrectiveWorkerResult(
+  context,
+  ticketIds,
+  checkId,
+  detail,
+  evidenceIds = [checkId],
+) {
   const acceptedHead = await git(context.worktree, ["rev-parse", "HEAD"]);
-  context.artifacts["corrective-work.json"] = {
+    context.artifacts["worker-rejection.json"] = {
     schemaVersion: 1,
-    kind: "CORRECTIVE_WORK",
+    kind: "WORKER_CONTRACT_REJECTION",
     status: "BLOCKED",
     sourceTicketIds: [...ticketIds].sort(compareEvidenceIds),
-    reason: { checkId, detail },
+    reason: {
+      checkId,
+      detail,
+      evidenceIds: [...new Set(evidenceIds)].sort(compareEvidenceIds),
+    },
     silentMerge: false,
     acceptedIntegration: {
       head: acceptedHead,
@@ -5427,9 +5561,47 @@ function parseAdvisor(source, ticketIds, expectedEvidence) {
   return advisor;
 }
 
-/** @param {string} source @param {string} verificationId */
-function parseWorkerVerification(source, verificationId) {
+/**
+ * @param {string} source
+ * @param {string} verificationId
+ * @returns {{status: "BLOCKED", checkId: string, detail: string, evidenceIds: string[]} | {status: "PASS", verification: {id: string, role: string, status: "PASS", exitCode: number}}}
+ */
+function parseWorkerResult(source, verificationId) {
   const report = parseJsonOutput(source, "Worker");
+  if (
+    JSON.stringify(Object.keys(report).sort()) ===
+      JSON.stringify(["blockingFinding", "schemaVersion", "status"]) &&
+    report.schemaVersion === 1 &&
+    report.status === "BLOCKED" &&
+    report.blockingFinding &&
+    JSON.stringify(Object.keys(report.blockingFinding).sort()) ===
+      JSON.stringify(["code", "evidenceIds"]) &&
+    Array.isArray(report.blockingFinding.evidenceIds) &&
+    report.blockingFinding.evidenceIds.length > 0 &&
+    report.blockingFinding.evidenceIds.every(isSafeEvidenceId)
+  ) {
+    const rejection = /** @type {Record<string, {checkId: string, detail: string}>} */ ({
+      SUBAGENT_SPAWN_ATTEMPT: {
+        checkId: "worker-subagent-spawn",
+        detail: "Worker attempted to spawn a subagent outside its role authority.",
+      },
+      PARTIAL_RESULT: {
+        checkId: "worker-partial-result",
+        detail: "Worker returned partial work instead of its complete ticket contract.",
+      },
+      TICKET_CODE_CONFLICT: {
+        checkId: "worker-ticket-code-conflict",
+        detail: "Worker reported a conflict between the ticket and observed code.",
+      },
+    })[report.blockingFinding.code];
+    if (rejection) {
+      return {
+        status: "BLOCKED",
+        ...rejection,
+        evidenceIds: [...report.blockingFinding.evidenceIds].sort(compareEvidenceIds),
+      };
+    }
+  }
   if (
     JSON.stringify(Object.keys(report).sort()) !==
       JSON.stringify(["schemaVersion", "ticketVerification"]) ||
@@ -5443,10 +5615,13 @@ function parseWorkerVerification(source, verificationId) {
     throw new Error("Worker must report its mapped ticket verification PASS.");
   }
   return {
-    id: verificationId,
-    role: "worker-ticket-verification",
     status: "PASS",
-    exitCode: 0,
+    verification: {
+      id: verificationId,
+      role: "worker-ticket-verification",
+      status: "PASS",
+      exitCode: 0,
+    },
   };
 }
 
@@ -5768,6 +5943,16 @@ async function leaseFingerprint(worktree, writeLease) {
     writeLease.map(async (projectPath) => ({
       path: projectPath,
       hash: await tryGit(worktree, ["hash-object", "--no-filters", "--", projectPath]),
+    })),
+  );
+}
+
+/** @param {string} worktree @param {string[]} writeLease */
+async function leaseFingerprintFromIndex(worktree, writeLease) {
+  return Promise.all(
+    writeLease.map(async (projectPath) => ({
+      path: projectPath,
+      hash: await tryGit(worktree, ["rev-parse", "--verify", `:${projectPath}`]),
     })),
   );
 }

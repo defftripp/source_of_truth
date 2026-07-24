@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Reject sequential and parallel Worker contract violations before checkpoint,
+  including out-of-lease changes, forbidden commits, explicit subagent attempts,
+  partial results, ticket/code conflicts, unrelated dirtiness, and failing or
+  stale targeted evidence. Persist only bounded diagnostic evidence, restore the
+  accepted state, and require a fresh Context Packet on corrected retry.
 - Bound Planner/Advisor plan review to two evidence-bearing rounds, require
   actionable `REVISE` findings for coverage, verification, dependency,
   assumption, and scope defects, and terminate unresolved plans at a durable

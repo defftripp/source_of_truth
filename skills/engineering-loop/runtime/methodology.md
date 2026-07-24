@@ -191,7 +191,13 @@ runtime-owned Worker worktrees are discarded and verified absent before the
 batch is relaunched. Worker authority
 violations and divergent, conflicting, or out-of-lease results create BLOCKED
 corrective work; silent merge is forbidden and the accepted integration HEAD is
-left unchanged. Parallel timelines, worktree roots, eligibility reasons,
+left unchanged. The same fail-closed contract applies to sequential STANDARD
+Workers, explicit subagent-attempt or partial-result findings, ticket/code
+conflicts, unrelated dirty state, and failing or stale targeted evidence.
+Rejection evidence contains only ticket IDs, a bounded reason, and the accepted
+HEAD; it never stores raw Worker output or transcripts. A corrected rerun uses a
+fresh Context Packet before the same ticket can earn a checkpoint. Parallel
+timelines, worktree roots, eligibility reasons,
 targeted checks, checkpoints, and final verification ordering are durable run
 evidence. Protected Integration and Stable branches remain unchanged, and
 success still terminates at READY_FOR_HUMAN.

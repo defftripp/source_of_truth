@@ -84,5 +84,5 @@ const verification = spawnSync(verificationCommand[0], verificationCommand.slice
 assert.equal(verification.status, 0);
 process.stdout.write(`${JSON.stringify({
   schemaVersion: 1,
-  ticketVerification: { id: "ticket-message-test", status: "PASS" },
+  ticketVerification: { id: packet.verificationIds[0], status: "PASS" },
 })}\n`);

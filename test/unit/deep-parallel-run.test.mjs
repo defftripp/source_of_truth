@@ -90,7 +90,7 @@ test("a Worker commit or integration attempt is BLOCKED before Root acceptance",
     assert.deepEqual(report.run.checkpointCommits, []);
     assert.equal(await git(prepared.target, "rev-parse", "develop"), prepared.developBefore);
     assert.equal(await git(prepared.target, "rev-parse", "main"), prepared.mainBefore);
-    const corrective = await readRunArtifact(report, "corrective-work.json");
+    const corrective = await readRunArtifact(report, "worker-rejection.json");
     assert.equal(corrective.status, "BLOCKED");
     assert.equal(corrective.silentMerge, false);
     assert.equal(corrective.acceptedIntegration.changed, false);
@@ -125,7 +125,7 @@ test("a conflicting Worker result creates BLOCKED corrective work without changi
     assert.equal(report.status, "BLOCKED");
     assert.equal(report.failure.checkId, "worker-result-conflict");
     assert.equal(report.run.checkpointCommit, null);
-    const corrective = await readRunArtifact(report, "corrective-work.json");
+    const corrective = await readRunArtifact(report, "worker-rejection.json");
     assert.deepEqual(corrective.sourceTicketIds, ["TICKET-A", "TICKET-B"]);
     assert.equal(corrective.acceptedIntegration.head, report.run.head);
     assert.equal(corrective.acceptedIntegration.changed, false);
@@ -147,7 +147,7 @@ test("pending parallel results are revalidated before the first Root checkpoint"
     assert.equal(report.run.checkpointCommit, null);
     assert.match(await readFile(path.join(report.run.worktree, "src", "a.mjs"), "utf8"), /initial-a/u);
     assert.match(await readFile(path.join(report.run.worktree, "src", "b.mjs"), "utf8"), /initial-b/u);
-    const corrective = await readRunArtifact(report, "corrective-work.json");
+    const corrective = await readRunArtifact(report, "worker-rejection.json");
     assert.deepEqual(corrective.sourceTicketIds, ["TICKET-A", "TICKET-B"]);
     assert.equal(corrective.acceptedIntegration.head, report.run.head);
   } finally {

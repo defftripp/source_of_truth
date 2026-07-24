@@ -105,5 +105,8 @@ fail preflight.
   evidence is insufficient, Remote Checkpoint Sync needs a Human Gate, or
   ownership forbids automatic repair. Two unresolved Planner/Advisor rounds
   also persist an Advisor Human Gate and terminate `BLOCKED` before Worker.
+  Worker authority, partial-result, ticket/code-conflict, Write Lease,
+  unrelated-dirtiness, or targeted-evidence failures persist a bounded
+  rejection artifact and stop before a Root checkpoint.
 - `EXPLICIT_INVOCATION_REQUIRED` (exit `64`): the deterministic entrypoint was
   called without its explicit invocation guard; the probe did not run.

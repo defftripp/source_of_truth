@@ -239,6 +239,13 @@ Worker invocation sees only its ticket-specific durable Context Packet and
 exclusive Write Lease, cannot commit through the command guard, and cannot
 delegate subagents under its contract. The command guard also records and
 rejects forbidden Git commands launched by a nested Worker process.
+Root also rejects explicit subagent-attempt, partial-result, and
+ticket/code-conflict findings, scope expansion, unrelated dirtiness, and
+failing or stale targeted evidence. Every rejection restores the accepted
+application state, creates bounded `worker-rejection.json` evidence without raw
+Worker output, and terminates `BLOCKED` before a checkpoint. A corrected rerun
+starts the same ticket with a fresh Context Packet and must earn fresh green
+targeted evidence.
 
 Before Worker execution, Planner and Advisor may perform at most two bounded
 evaluation rounds. Advisor returns strict actionable `REVISE` findings for
