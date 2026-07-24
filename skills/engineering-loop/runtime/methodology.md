@@ -11,6 +11,13 @@ graph. Root chooses the lexicographically first open ticket whose blockers are
 complete. Each Worker invocation receives only that ticket's Context Packet and
 exclusive Write Lease; Root remains the sole committer.
 
+Planner and Advisor have at most two evaluation rounds. Advisor `REVISE`
+findings are strict, actionable, and evidence-bound: unmapped acceptance,
+missing verification, unsafe dependencies, unsupported assumptions, and scope
+leaks cannot become approval. A corrected second round may proceed; a second
+unresolved round records the findings in a Human Gate and terminates `BLOCKED`
+before Worker execution.
+
 When repository research leaves one real product decision unresolved, STANDARD
 persists exactly one `human-gate.json` after `research.json` and before spec,
 planning, or Worker execution. The question carries one recommendation and the

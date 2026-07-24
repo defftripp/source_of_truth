@@ -1254,7 +1254,7 @@ function validateRemoteSyncEvidence(
 /**
  * @param {string} runRoot
  * @param {string[]} names
- * @param {{ state?: Record<string, any>, graph?: Record<string, any>, humanGate?: Record<string, any> }} [context]
+ * @param {{ state?: Record<string, any>, graph?: Record<string, any>, humanGate?: Record<string, any>, advisor?: Record<string, any> }} [context]
  */
 async function validateRequiredJsonArtifacts(runRoot, names, context = {}) {
   /** @type {string[]} */
@@ -1288,7 +1288,7 @@ async function validateRequiredJsonArtifacts(runRoot, names, context = {}) {
 /**
  * @param {string} name
  * @param {Record<string, any>} value
- * @param {{ state?: Record<string, any>, graph?: Record<string, any>, humanGate?: Record<string, any> }} context
+ * @param {{ state?: Record<string, any>, graph?: Record<string, any>, humanGate?: Record<string, any>, advisor?: Record<string, any> }} context
  */
 function validateRunArtifactContract(name, value, context) {
   /** @type {string[]} */
@@ -1385,6 +1385,60 @@ function validateRunArtifactContract(name, value, context) {
         (/** @type {string} */ id) =>
           !context.graph?.tickets?.some((/** @type {any} */ ticket) => ticket?.id === id),
       )
+    ) {
+      invalid();
+    }
+    return errors;
+  }
+  if (name === "advisor-rounds.json") {
+    const findingCodes = new Set([
+      "MISSING_VERIFICATION",
+      "SCOPE_LEAK",
+      "UNMAPPED_ACCEPTANCE",
+      "UNSAFE_DEPENDENCY",
+      "UNSUPPORTED_ASSUMPTION",
+    ]);
+    const validFinding = (/** @type {any} */ finding) =>
+      finding &&
+      JSON.stringify(Object.keys(finding).sort()) ===
+        JSON.stringify(["code", "evidenceIds", "id", "message", "ticketId"]) &&
+      isEvidenceId(finding.id) &&
+      findingCodes.has(finding.code) &&
+      typeof finding.message === "string" &&
+      finding.message.length > 0 &&
+      (finding.ticketId === null || isEvidenceId(finding.ticketId)) &&
+      isNonEmptyStringArray(finding.evidenceIds) &&
+      finding.evidenceIds.every(isEvidenceId);
+    if (
+      JSON.stringify(Object.keys(value).sort()) !==
+        JSON.stringify(["maxRounds", "rounds", "schemaVersion"]) ||
+      value.schemaVersion !== 1 ||
+      value.maxRounds !== 2 ||
+      !Array.isArray(value.rounds) ||
+      value.rounds.length < 1 ||
+      value.rounds.length > value.maxRounds ||
+      !value.rounds.every(
+        (/** @type {any} */ round, /** @type {number} */ index) =>
+          round &&
+          JSON.stringify(Object.keys(round).sort()) ===
+            JSON.stringify(["concerns", "round", "status"]) &&
+          round.round === index + 1 &&
+          ["APPROVED", "REVISE"].includes(round.status) &&
+          Array.isArray(round.concerns) &&
+          (
+            round.status === "APPROVED"
+              ? round.concerns.length === 0
+              : round.concerns.length > 0 && round.concerns.every(validFinding)
+          ),
+      ) ||
+      value.rounds.some(
+        (/** @type {any} */ round, /** @type {number} */ index) =>
+          round.status === "APPROVED" && index !== value.rounds.length - 1,
+      ) ||
+      value.rounds.at(-1)?.status !== "APPROVED" ||
+      context.advisor?.status !== "APPROVED" ||
+      JSON.stringify(value.rounds.at(-1)?.concerns) !==
+        JSON.stringify(context.advisor?.concerns)
     ) {
       invalid();
     }
@@ -1635,6 +1689,7 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
   errors.push(
     ...(await validateRequiredJsonArtifacts(runRoot, requiredNames, { state, graph })),
   );
+  const advisor = await tryReadJson(path.join(runRoot, "advisor.json"));
   if (state.mode === "DEEP") {
     const [domainModel, migrationContract, manifest, approval, rollbackPlan] = await Promise.all([
       tryReadJson(path.join(runRoot, "domain-model.json")),
@@ -1668,6 +1723,7 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
   const expectsCorrectiveWork = graphHasCorrectiveReviewLinks(graph);
   const allowedNames = new Set([
     ...requiredNames,
+    ...(state.mode === "STANDARD" ? ["advisor-rounds.json"] : []),
     ...reviewEvidence.hashes.keys(),
     ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
     "human-gate.json",
@@ -1723,6 +1779,15 @@ async function validateGraphRunArtifacts(runRoot, state, graph, durableRevision)
         !correctiveWorkMatchesGraph(graph, value)
       ) {
         errors.push("Run corrective-work links do not match graph history");
+      }
+      if (entry.name === "advisor-rounds.json") {
+        errors.push(
+          ...validateRunArtifactContract(entry.name, value, {
+            state,
+            graph,
+            advisor: advisor ?? undefined,
+          }),
+        );
       }
     } catch {
       errors.push(`Run Artifact is not valid JSON: ${entry.name}`);

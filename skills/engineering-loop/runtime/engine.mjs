@@ -37,6 +37,7 @@ const OUTPUT_LIMIT = 1024 * 1024;
 const INSTRUMENTAL_ROLES = Object.freeze(["test", "typecheck", "build", "observed-behavior"]);
 const RUN_ARTIFACT_FILES = new Set([
   "advisor.json",
+  "advisor-rounds.json",
   "context-packet.json",
   "corrective-work.json",
   "domain-decisions.json",
@@ -819,7 +820,9 @@ async function runStandardTask(target, prepared, request) {
   const resumeApprovalCheckpoint = resumable?.phase === "APPROVAL_CHECKPOINT";
   let research;
   let specLite;
+  /** @type {any} */
   let planned;
+  let plannerOutput = "";
   let deepPlan;
   /** @type {Record<string, any>} */
   let ticketGraph;
@@ -965,22 +968,48 @@ async function runStandardTask(target, prepared, request) {
     artifacts["spec-lite.json"] = specLite;
     await writeJson(path.join(artifactRoot, "spec-lite.json"), specLite);
 
-    transitionState(stateHistory, "TICKET_PLANNING");
-    const plannerExecution = await executeReadOnlyRunCommand(context, commands.planner);
-    if (plannerExecution.blocked) {
-      return plannerExecution.blocked;
-    }
-    if (plannerExecution.result.exitCode !== 0) {
-      return blockStandardAfterCommand(context, "TICKET_PLANNING", commands.planner, plannerExecution.result);
-    }
-    try {
-      planned = parseExecutionPlan(
-        plannerExecution.result.stdout,
-        mode === "DEEP" ? { ...request, standard: plannedRequest } : request,
+    if (mode === "STANDARD") {
+      const planning = await runPlannerAdvisorRounds(
+        context,
+        request,
         commands,
       );
-    } catch {
-      return blockStandardSchema(context, "TICKET_PLANNING", "acceptance-coverage");
+      if (planning.blocked) {
+        return planning.blocked;
+      }
+      planned = planning.planned;
+      advisor = planning.advisor;
+    } else {
+      transitionState(stateHistory, "TICKET_PLANNING");
+      const plannerExecution = await executeReadOnlyRunCommand(
+        context,
+        commands.planner,
+      );
+      if (plannerExecution.blocked) {
+        return plannerExecution.blocked;
+      }
+      if (plannerExecution.result.exitCode !== 0) {
+        return blockStandardAfterCommand(
+          context,
+          "TICKET_PLANNING",
+          commands.planner,
+          plannerExecution.result,
+        );
+      }
+      plannerOutput = plannerExecution.result.stdout;
+      try {
+        planned = parseExecutionPlan(
+          plannerExecution.result.stdout,
+          { ...request, standard: plannedRequest },
+          commands,
+        );
+      } catch {
+        return blockStandardSchema(
+          context,
+          "TICKET_PLANNING",
+          "acceptance-coverage",
+        );
+      }
     }
     ticketGraph = /** @type {Record<string, any>} */ ({
       schemaVersion: 1,
@@ -991,7 +1020,7 @@ async function runStandardTask(target, prepared, request) {
       decisionCommit: context.decisionCommit ?? null,
       executionOrder: [],
       reviewRounds: [],
-      tickets: planned.tickets.map((ticket) => ({
+      tickets: planned.tickets.map((/** @type {any} */ ticket) => ({
         ...ticket,
         status: "OPEN",
         attempts: 0,
@@ -1005,7 +1034,7 @@ async function runStandardTask(target, prepared, request) {
 
     if (mode === "DEEP") {
       try {
-        deepPlan = parseJsonOutput(plannerExecution.result.stdout, "DEEP Planner");
+        deepPlan = parseJsonOutput(plannerOutput, "DEEP Planner");
       } catch {
         return blockStandardSchema(context, "TICKET_PLANNING", "deep-plan-contract");
       }
@@ -1031,7 +1060,7 @@ async function runStandardTask(target, prepared, request) {
         artifacts["advisor.json"] = {
           schemaVersion: 1,
           status: "REVISE",
-          ticketIds: planned.tickets.map((ticket) => ticket.id),
+          ticketIds: planned.tickets.map((/** @type {any} */ ticket) => ticket.id),
           evidence: [],
           concerns: deepPlanResult.errors,
         };
@@ -1054,37 +1083,6 @@ async function runStandardTask(target, prepared, request) {
       return persistStandardHumanGate(context, manifestGate, { migrationManifest: deepPlan.migrationManifest }, true);
     }
 
-    transitionState(stateHistory, "ADVISOR_GATE");
-    const expectedAdvisorEvidence = [
-      ...advisorEvidence(planned),
-      ...(mode === "DEEP"
-        ? deepAdvisorEvidence(
-            /** @type {Record<string, any>} */ (/** @type {unknown} */ (deepPlan)),
-            artifacts["manifest-approval.json"].manifestHash,
-          )
-        : []),
-    ].sort();
-    const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
-      ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
-      ENGINEERING_ADVISOR_TICKETS: JSON.stringify(planned.tickets.map((ticket) => ticket.id)),
-    });
-    if (advisorExecution.blocked) {
-      return advisorExecution.blocked;
-    }
-    if (advisorExecution.result.exitCode !== 0) {
-      return blockStandardAfterCommand(context, "ADVISOR_GATE", commands.advisor, advisorExecution.result);
-    }
-    try {
-      advisor = parseAdvisor(
-        advisorExecution.result.stdout,
-        planned.tickets.map((ticket) => ticket.id),
-        expectedAdvisorEvidence,
-      );
-    } catch {
-      return blockStandardSchema(context, "ADVISOR_GATE", "advisor-approval");
-    }
-    artifacts["advisor.json"] = advisor;
-    await writeJson(path.join(artifactRoot, "advisor.json"), advisor);
     } else {
       await git(worktree, ["reset", "--hard", "HEAD"]);
       await git(worktree, ["clean", "-fd"]);
@@ -1160,7 +1158,9 @@ async function runStandardTask(target, prepared, request) {
         transitionState(stateHistory, "ADVISOR_GATE");
         const advisorExecution = await executeReadOnlyRunCommand(context, commands.advisor, {
           ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedAdvisorEvidence),
-          ENGINEERING_ADVISOR_TICKETS: JSON.stringify(planned.tickets.map((ticket) => ticket.id)),
+          ENGINEERING_ADVISOR_TICKETS: JSON.stringify(
+            planned.tickets.map((/** @type {any} */ ticket) => ticket.id),
+          ),
         });
         if (advisorExecution.blocked) {
           return advisorExecution.blocked;
@@ -1171,7 +1171,7 @@ async function runStandardTask(target, prepared, request) {
         try {
           advisor = parseAdvisor(
             advisorExecution.result.stdout,
-            planned.tickets.map((ticket) => ticket.id),
+            planned.tickets.map((/** @type {any} */ ticket) => ticket.id),
             expectedAdvisorEvidence,
           );
         } catch {
@@ -1181,7 +1181,7 @@ async function runStandardTask(target, prepared, request) {
       } else {
         advisor = parseAdvisor(
           JSON.stringify(artifacts["advisor.json"]),
-          planned.tickets.map((ticket) => ticket.id),
+          planned.tickets.map((/** @type {any} */ ticket) => ticket.id),
           expectedAdvisorEvidence,
         );
       }
@@ -4028,6 +4028,7 @@ async function findResumableStandardRun(worktreeRoot, requestHash, baseCommit, m
       }
       const allowedArtifactNames = new Set([
         ...requiredArtifactNames,
+        ...(mode === "STANDARD" ? ["advisor-rounds.json"] : []),
         ...expectedReviewArtifacts.keys(),
         ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
         "human-gate.json",
@@ -4347,6 +4348,7 @@ async function validateRemoteCheckpointArtifacts(
   const expectsCorrectiveWork = graphHasCorrectiveReviewLinks(graph);
   const allowedNames = new Set([
     ...requiredNames,
+    "advisor-rounds.json",
     ...expectedReviewArtifacts.keys(),
     ...(expectsCorrectiveWork ? ["corrective-work.json"] : []),
     "human-gate.json",
@@ -4929,6 +4931,444 @@ function parseExecutionPlan(source, request, commands) {
       .sort((left, right) => compareEvidenceIds(left.id, right.id)),
     coverage,
   };
+}
+
+/**
+ * @param {Record<string, any>} context
+ * @param {Record<string, any>} request
+ * @param {Record<string, any>} commands
+ */
+async function runPlannerAdvisorRounds(context, request, commands) {
+  const rounds = [];
+  /** @type {Array<Record<string, any>>} */
+  let priorFindings = [];
+  for (let round = 1; round <= 2; round += 1) {
+    transitionState(context.stateHistory, "TICKET_PLANNING");
+    const plannerExecution = await executeReadOnlyRunCommand(
+      context,
+      commands.planner,
+      {
+        ENGINEERING_PLANNER_REVISION_ROUND: String(round),
+        ENGINEERING_PLANNER_FINDINGS: JSON.stringify(priorFindings),
+      },
+    );
+    if (plannerExecution.blocked) {
+      return { blocked: plannerExecution.blocked };
+    }
+    if (plannerExecution.result.exitCode !== 0) {
+      return {
+        blocked: await blockStandardAfterCommand(
+          context,
+          "TICKET_PLANNING",
+          commands.planner,
+          plannerExecution.result,
+        ),
+      };
+    }
+    const assessment = assessPlannerCandidate(
+      plannerExecution.result.stdout,
+      request,
+      commands,
+    );
+    const expectedEvidence =
+      assessment.findings.length === 0
+        ? advisorEvidence(
+            /** @type {{tickets: any[], coverage: any[]}} */ (
+              assessment.planned
+            ),
+          )
+        : [
+            ...new Set(
+              assessment.findings.flatMap((finding) => [
+                finding.id,
+                ...finding.evidenceIds,
+              ]),
+            ),
+          ].sort();
+    const ticketIds = assessment.ticketIds;
+    transitionState(context.stateHistory, "ADVISOR_GATE");
+    const advisorExecution = await executeReadOnlyRunCommand(
+      context,
+      commands.advisor,
+      {
+        ENGINEERING_ADVISOR_EVIDENCE: JSON.stringify(expectedEvidence),
+        ENGINEERING_ADVISOR_FINDINGS: JSON.stringify(assessment.findings),
+        ENGINEERING_ADVISOR_PLAN: JSON.stringify(assessment.rawPlan),
+        ENGINEERING_ADVISOR_ROUND: String(round),
+        ENGINEERING_ADVISOR_TICKETS: JSON.stringify(ticketIds),
+      },
+    );
+    if (advisorExecution.blocked) {
+      return { blocked: advisorExecution.blocked };
+    }
+    if (advisorExecution.result.exitCode !== 0) {
+      return {
+        blocked: await blockStandardAfterCommand(
+          context,
+          "ADVISOR_GATE",
+          commands.advisor,
+          advisorExecution.result,
+        ),
+      };
+    }
+    let advisor;
+    try {
+      advisor = parseAdvisorDecision(
+        advisorExecution.result.stdout,
+        ticketIds,
+        expectedEvidence,
+        assessment.findings,
+      );
+    } catch {
+      return {
+        blocked: await blockStandardSchema(
+          context,
+          "ADVISOR_GATE",
+          "advisor-approval",
+        ),
+      };
+    }
+    rounds.push({
+      round,
+      status: advisor.status,
+      concerns: advisor.concerns,
+    });
+    context.artifacts["advisor.json"] = advisor;
+    context.artifacts["advisor-rounds.json"] = {
+      schemaVersion: 1,
+      maxRounds: 2,
+      rounds,
+    };
+    if (advisor.status === "APPROVED") {
+      return {
+        planned: assessment.planned,
+        advisor,
+        blocked: null,
+      };
+    }
+    priorFindings = assessment.findings;
+  }
+  const unresolvedFindings = rounds.at(-1)?.concerns ?? [];
+  const humanGate = createStandardHumanGate({
+    id: `ADVISOR-REVISION-${context.runId}`,
+    kind: "ADVISOR_REVISION_EXHAUSTED",
+    requestHash: context.requestHash,
+    createdFromState: "ADVISOR_GATE",
+    researchFactIds:
+      context.artifacts["research.json"]?.facts?.map(
+        (/** @type {any} */ fact) => fact.id,
+      ) ?? [],
+    question: {
+      prompt:
+        "How should the unresolved Planner and Advisor findings be resolved?",
+      recommendation: {
+        answer: "revise-scope",
+        consequence:
+          "Clarify the bounded plan before any Worker is allowed to execute.",
+      },
+      alternatives: [],
+    },
+    extra: {
+      revisionRounds: 2,
+      unresolvedFindings,
+    },
+  });
+  context.artifacts["human-gate.json"] = humanGate;
+  transitionState(context.stateHistory, "HUMAN_GATE");
+  return {
+    blocked: await blockStandardSchema(
+      context,
+      "ADVISOR_GATE",
+      "advisor-revision-exhausted",
+    ),
+  };
+}
+
+/** @param {string} source @param {Record<string, any>} request @param {Record<string, any>} commands */
+function assessPlannerCandidate(source, request, commands) {
+  let rawPlan;
+  try {
+    rawPlan = parseJsonOutput(source, "Planner");
+  } catch {
+    rawPlan = null;
+  }
+  /** @type {Array<{key: string, code: string, message: string, ticketId: string | null, evidenceIds: string[]}>} */
+  const drafts = [];
+  /**
+   * @param {string} code
+   * @param {string} message
+   * @param {string | null} ticketId
+   * @param {string[]} evidenceIds
+   */
+  const add = (code, message, ticketId, evidenceIds) => {
+    const key = `${code}\0${ticketId ?? ""}\0${message}`;
+    if (!drafts.some((finding) => finding.key === key)) {
+      drafts.push({ key, code, message, ticketId, evidenceIds });
+    }
+  };
+  const tickets = Array.isArray(rawPlan?.tickets) ? rawPlan.tickets : [];
+  const ticketIds = tickets
+    .map((/** @type {any} */ ticket) => ticket?.id)
+    .filter(isSafeEvidenceId);
+  if (
+    !rawPlan ||
+    rawPlan.schemaVersion !== 1 ||
+    tickets.length === 0 ||
+    Object.keys(rawPlan).some(
+      (key) => !["assumptions", "schemaVersion", "tickets"].includes(key),
+    )
+  ) {
+    add(
+      "UNSUPPORTED_ASSUMPTION",
+      "Planner output must use the supported schema and explicit ticket contract.",
+      null,
+      ["planner-contract"],
+    );
+  }
+  if (Array.isArray(rawPlan?.assumptions) && rawPlan.assumptions.length > 0) {
+    add(
+      "UNSUPPORTED_ASSUMPTION",
+      "Planner must resolve or evidence assumptions before execution.",
+      null,
+      ["planner-assumptions"],
+    );
+  }
+  const selectedVerification = new Set([
+    commands.ticketVerification.id,
+    ...commands.relevantChecks.map((/** @type {any} */ command) => command.id),
+  ]);
+  const requestLease = new Set(request.writeLease);
+  const requestContext = new Set(request.standard.contextPaths);
+  const requestCriteria = new Map(
+    request.standard.acceptanceCriteria.map((/** @type {any} */ criterion) => [
+      criterion.id,
+      criterion,
+    ]),
+  );
+  const knownTicketIds = new Set(ticketIds);
+  for (const criterion of request.standard.acceptanceCriteria) {
+    const matching = tickets.filter(
+      (/** @type {any} */ ticket) =>
+        Array.isArray(ticket?.acceptanceCriteria) &&
+        ticket.acceptanceCriteria.includes(criterion.id),
+    );
+    if (matching.length !== 1) {
+      add(
+        "UNMAPPED_ACCEPTANCE",
+        `Acceptance criterion ${criterion.id} must map to exactly one ticket.`,
+        matching[0]?.id ?? null,
+        [criterion.id],
+      );
+      continue;
+    }
+    const verificationIds = Array.isArray(matching[0].verificationIds)
+      ? matching[0].verificationIds
+      : [];
+    if (
+      criterion.verificationIds.some(
+        (/** @type {string} */ verificationId) =>
+          !verificationIds.includes(verificationId),
+      )
+    ) {
+      add(
+        "MISSING_VERIFICATION",
+        `Ticket ${matching[0].id} must include every verification for ${criterion.id}.`,
+        matching[0].id,
+        [criterion.id, ...criterion.verificationIds],
+      );
+    }
+  }
+  for (const ticket of tickets) {
+    const ticketId = isSafeEvidenceId(ticket?.id) ? ticket.id : null;
+    if (
+      !ticketId ||
+      !isNonEmptyString(ticket?.objective) ||
+      !Array.isArray(ticket?.acceptanceCriteria)
+    ) {
+      add(
+        "UNSUPPORTED_ASSUMPTION",
+        "Every Planner ticket needs a safe id, objective, and explicit acceptance criteria.",
+        ticketId,
+        ["planner-ticket-contract"],
+      );
+    }
+    const verificationIds = Array.isArray(ticket?.verificationIds)
+      ? ticket.verificationIds
+      : [];
+    if (
+      verificationIds.length === 0 ||
+      verificationIds.some(
+        (/** @type {any} */ verificationId) =>
+          !isSafeEvidenceId(verificationId) ||
+          !selectedVerification.has(verificationId),
+      )
+    ) {
+      add(
+        "MISSING_VERIFICATION",
+        `Ticket ${ticketId ?? "unknown"} must use registered verification ids.`,
+        ticketId,
+        ["verification-registry"],
+      );
+    }
+    const dependencies = Array.isArray(ticket?.dependencies)
+      ? ticket.dependencies
+      : [];
+    if (
+      !Array.isArray(ticket?.dependencies) ||
+      dependencies.some(
+        (/** @type {any} */ dependency) =>
+          !isSafeEvidenceId(dependency) ||
+          dependency === ticketId ||
+          !knownTicketIds.has(dependency),
+      )
+    ) {
+      add(
+        "UNSAFE_DEPENDENCY",
+        `Ticket ${ticketId ?? "unknown"} has an unsafe or unresolved dependency.`,
+        ticketId,
+        ["ticket-dependency-graph"],
+      );
+    }
+    const acceptanceCriteria = Array.isArray(ticket?.acceptanceCriteria)
+      ? ticket.acceptanceCriteria
+      : [];
+    const writeLease = Array.isArray(ticket?.writeLease)
+      ? ticket.writeLease
+      : [];
+    const contextPaths = Array.isArray(ticket?.contextPaths)
+      ? ticket.contextPaths
+      : [];
+    if (
+      acceptanceCriteria.some(
+        (/** @type {any} */ criterionId) => !requestCriteria.has(criterionId),
+      ) ||
+      writeLease.length === 0 ||
+      writeLease.some(
+        (/** @type {any} */ leasedPath) => !requestLease.has(leasedPath),
+      ) ||
+      contextPaths.length === 0 ||
+      contextPaths.some(
+        (/** @type {any} */ contextPath) => !requestContext.has(contextPath),
+      )
+    ) {
+      add(
+        "SCOPE_LEAK",
+        `Ticket ${ticketId ?? "unknown"} exceeds the requested scope or context boundary.`,
+        ticketId,
+        ["request-scope"],
+      );
+    }
+  }
+  if (hasDependencyCycle(tickets)) {
+    add(
+      "UNSAFE_DEPENDENCY",
+      "Planner dependency graph must be acyclic.",
+      null,
+      ["ticket-dependency-graph"],
+    );
+  }
+  let planned = null;
+  if (drafts.length === 0) {
+    try {
+      planned = parseExecutionPlan(source, request, commands);
+    } catch {
+      add(
+        "UNSUPPORTED_ASSUMPTION",
+        "Planner output violates the bounded execution contract.",
+        null,
+        ["planner-contract"],
+      );
+    }
+  }
+  const findings = drafts.map((draft, index) => ({
+    id: `advisor-finding-${String(index + 1).padStart(3, "0")}`,
+    code: draft.code,
+    message: draft.message,
+    ticketId: draft.ticketId,
+    evidenceIds: [...new Set(draft.evidenceIds.filter(isSafeEvidenceId))].sort(),
+  }));
+  return {
+    rawPlan,
+    ticketIds: planned
+      ? planned.tickets.map((/** @type {any} */ ticket) => ticket.id)
+      : ticketIds,
+    planned,
+    findings,
+  };
+}
+
+/** @param {any[]} tickets */
+function hasDependencyCycle(tickets) {
+  const ids = new Set(
+    tickets
+      .map((ticket) => ticket?.id)
+      .filter(isSafeEvidenceId),
+  );
+  const completed = new Set();
+  while (completed.size < ids.size) {
+    const next = tickets.find(
+      (ticket) =>
+        ids.has(ticket?.id) &&
+        !completed.has(ticket.id) &&
+        Array.isArray(ticket.dependencies) &&
+        ticket.dependencies.every((/** @type {string} */ dependency) =>
+          completed.has(dependency),
+        ),
+    );
+    if (!next) {
+      return ids.size > 0;
+    }
+    completed.add(next.id);
+  }
+  return false;
+}
+
+/**
+ * @param {string} source
+ * @param {string[]} ticketIds
+ * @param {string[]} expectedEvidence
+ * @param {Array<Record<string, any>>} findings
+ */
+function parseAdvisorDecision(
+  source,
+  ticketIds,
+  expectedEvidence,
+  findings,
+) {
+  const advisor = parseJsonOutput(source, "Advisor");
+  const commonValid =
+    JSON.stringify(Object.keys(advisor).sort()) ===
+      JSON.stringify([
+        "concerns",
+        "evidence",
+        "schemaVersion",
+        "status",
+        "ticketIds",
+      ]) &&
+    advisor.schemaVersion === 1 &&
+    JSON.stringify(advisor.ticketIds) === JSON.stringify(ticketIds) &&
+    Array.isArray(advisor.evidence) &&
+    advisor.evidence.length > 0 &&
+    advisor.evidence.every(isSafeEvidenceId) &&
+    JSON.stringify([...advisor.evidence].sort()) ===
+      JSON.stringify(expectedEvidence) &&
+    Array.isArray(advisor.concerns);
+  const approved =
+    commonValid &&
+    advisor.status === "APPROVED" &&
+    findings.length === 0 &&
+    advisor.concerns.length === 0;
+  const revise =
+    commonValid &&
+    advisor.status === "REVISE" &&
+    findings.length > 0 &&
+    JSON.stringify(advisor.concerns) === JSON.stringify(findings);
+  if (!approved && !revise) {
+    throw new Error(
+      "Advisor must emit a strict evidence-bearing APPROVED or actionable REVISE result.",
+    );
+  }
+  return advisor;
 }
 
 /** @param {any[]} tickets */

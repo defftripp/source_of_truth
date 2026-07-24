@@ -1732,6 +1732,38 @@ test("repair preserves a real STANDARD frontier and resume continues without cha
     );
     await writeFile(graphPath, originalGraph);
 
+    const advisorRoundsPath = path.join(interruptedRunRoot, "advisor-rounds.json");
+    const originalAdvisorRounds = await readFile(advisorRoundsPath);
+    const tamperedAdvisorRounds = JSON.parse(originalAdvisorRounds.toString("utf8"));
+    tamperedAdvisorRounds.rounds.at(-1).status = "REVISE";
+    tamperedAdvisorRounds.rounds.at(-1).concerns = [{
+      id: "advisor-finding-001",
+      code: "UNMAPPED_ACCEPTANCE",
+      message: "Forged unresolved finding.",
+      ticketId: "TICKET-1",
+      evidenceIds: ["acceptance-criterion-AC-1"],
+    }];
+    await writeJson(advisorRoundsPath, tamperedAdvisorRounds);
+    const tamperedAdvisorAudit = await invokeDoctor(prepared.target);
+    assert.equal(
+      tamperedAdvisorAudit.code,
+      1,
+      `${tamperedAdvisorAudit.stdout}\n${tamperedAdvisorAudit.stderr}`,
+    );
+    const tamperedAdvisorAuditReport = JSON.parse(tamperedAdvisorAudit.stdout);
+    assert.ok(
+      tamperedAdvisorAuditReport.evidence.some(
+        (/** @type {any} */ entry) =>
+          entry.id === `run-frontier:${interruptedRunId}` &&
+          entry.status === "INVALID" &&
+          entry.details.includes(
+            "required Run Artifact semantic contract is invalid: advisor-rounds.json",
+          ),
+      ),
+      JSON.stringify(tamperedAdvisorAuditReport, null, 2),
+    );
+    await writeFile(advisorRoundsPath, originalAdvisorRounds);
+
     await writeFile(absoluteRuntimePath, "drifted runtime before resume\n");
     const diagnosis = await invokeDoctor(prepared.target);
     assert.equal(diagnosis.code, 0, `${diagnosis.stdout}\n${diagnosis.stderr}`);

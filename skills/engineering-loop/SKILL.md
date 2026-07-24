@@ -103,6 +103,7 @@ fail preflight.
   runtime and project state without touching the Application Core.
 - `BLOCKED` (exit `1`): the target cannot be inspected safely, required
   evidence is insufficient, Remote Checkpoint Sync needs a Human Gate, or
-  ownership forbids automatic repair.
+  ownership forbids automatic repair. Two unresolved Planner/Advisor rounds
+  also persist an Advisor Human Gate and terminate `BLOCKED` before Worker.
 - `EXPLICIT_INVOCATION_REQUIRED` (exit `64`): the deterministic entrypoint was
   called without its explicit invocation guard; the probe did not run.

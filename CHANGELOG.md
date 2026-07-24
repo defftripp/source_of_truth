@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bound Planner/Advisor plan review to two evidence-bearing rounds, require
+  actionable `REVISE` findings for coverage, verification, dependency,
+  assumption, and scope defects, and terminate unresolved plans at a durable
+  Human Gate with `BLOCKED` state before Worker execution.
 - Add an explicit managed Project Runtime upgrade/rollback flow that blocks
   active feature runs, records the full pinned upstream diff, validates
   candidate compatibility before mutation, and reruns Doctor plus smoke after

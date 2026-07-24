@@ -570,6 +570,7 @@ test("one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecy
     assert.deepEqual(
       artifactTree.map((entry) => entry.path),
       [
+        "advisor-rounds.json",
         "advisor.json",
         "context-packet.json",
         "quality-review.json",

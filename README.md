@@ -240,6 +240,14 @@ exclusive Write Lease, cannot commit through the command guard, and cannot
 delegate subagents under its contract. The command guard also records and
 rejects forbidden Git commands launched by a nested Worker process.
 
+Before Worker execution, Planner and Advisor may perform at most two bounded
+evaluation rounds. Advisor returns strict actionable `REVISE` findings for
+unmapped acceptance criteria, missing verification, unsafe dependencies,
+unsupported assumptions, or scope expansion. A corrected second-round plan may
+continue; two unresolved rounds persist `advisor-rounds.json` and a Human Gate,
+then terminate the Run State Store as `BLOCKED` with zero Worker executions.
+Generic feedback and fabricated `APPROVED` results fail the Advisor schema.
+
 If repository research leaves one real STANDARD decision unresolved, the run
 stops before spec, planning, and Worker execution with one durable Human Gate.
 `human-gate.json` records the evidence-backed fact IDs, one recommended answer,
