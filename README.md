@@ -329,6 +329,41 @@ and Quality artifacts are regenerated against the new code fingerprint before
 full relevant verification. `PASS` and evidence-sufficient `DEGRADED` may reach
 `READY_FOR_HUMAN`; neither implies `ACCEPTED`, merge, or push.
 
+Capability discovery is also conditional. An ordinary FAST, STANDARD, or DEEP
+run has no discovery or installation stage. Only a structured gap that names
+the missing behavior, task evidence, and each inspected project/runtime
+capability with a concrete insufficiency may enter qualification.
+
+An already prepared project qualifies a quarantined candidate explicitly:
+
+```text
+node .engineering/runtime/engine.mjs --qualify-capability capability-request.json
+```
+
+The request evaluates the candidate's kind, verified HTTPS provenance and
+source, license, immutable revision and checksum, permissions, lifecycle
+scripts, instruction compatibility, maintenance evidence, conflicts, and exact
+task fit. Unknown sources, conflicting instructions, lifecycle scripts,
+excessive permissions, unresolved conflicts, or incomplete evidence return
+`REJECTED` before installation. Candidate input is staged under
+`.engineering/capability-candidates/<id>`; accepted files are copied only to
+`.engineering/capabilities/<id>`, pinned in the project-local registry, and
+checked by a non-executing package-content assertion resolved from the project
+verification registry before publication. The candidate cannot supply its path
+or expected content. That assertion is bound to the gap's verification
+evidence; it does not claim to execute or prove the missing behavior. Candidate-provided
+executable smoke is rejected, so qualification cannot make network or paid
+probes. Doctor verifies the exact registered file manifest and rejects drift,
+links, missing files, and undeclared files. A project-local lock serializes
+qualification. A failed smoke restores the registry and project tree exactly;
+an interrupted publish is recovered only from a journal matching the exact
+registry and installed-file identities.
+
+Global installation, credential access, write-enabled MCP, and paid probes are
+never automatic. Any such request writes a bounded hash-bound artifact under
+`.engineering/capabilities/human-gates/`, returns `HUMAN_GATE`, and performs no
+external action.
+
 Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
 
 ```json

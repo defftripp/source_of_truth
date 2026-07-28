@@ -3,13 +3,16 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sha256 } from "../runtime/contracts.mjs";
 
-export const RUNTIME_VERSION = "1.1.0";
+export const RUNTIME_VERSION = "1.2.0";
 
 export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering",
   ".engineering/AGENTS.md",
   ".engineering/CONTEXT.md",
   ".engineering/README.md",
+  ".engineering/capabilities",
+  ".engineering/capabilities/registry.json",
+  ".engineering/capability-candidates",
   ".engineering/adrs",
   ".engineering/adrs/.gitkeep",
   ".engineering/plans",
@@ -18,6 +21,7 @@ export const CANONICAL_PROJECT_SHELL_PATHS = Object.freeze([
   ".engineering/runs/.gitkeep",
   ".engineering/runtime",
   ".engineering/runtime/contracts.mjs",
+  ".engineering/runtime/capability-contracts.mjs",
   ".engineering/runtime/deep-contracts.mjs",
   ".engineering/runtime/doctor-contracts.mjs",
   ".engineering/runtime/engine.mjs",
@@ -111,6 +115,9 @@ async function canonicalShellFileContent(projectPath) {
   if (projectPath === ".engineering/state/project.json") {
     return json({ schemaVersion: 1, status: "PREPARED_PROJECT", runtimeVersion: RUNTIME_VERSION });
   }
+  if (projectPath === ".engineering/capabilities/registry.json") {
+    return json({ schemaVersion: 1, entries: [] });
+  }
   if (projectPath === ".engineering/verification/registry.json") {
     return json({
       schemaVersion: 1,
@@ -123,6 +130,7 @@ async function canonicalShellFileContent(projectPath) {
   if (projectPath === ".engineering/runtime/manifest.json") {
     const ownedFiles = [
       "runtime/contracts.mjs",
+      "runtime/capability-contracts.mjs",
       "runtime/deep-contracts.mjs",
       "runtime/doctor-contracts.mjs",
       "runtime/engine.mjs",

@@ -30,6 +30,7 @@ import {
   validateIndependentReview,
   validateReviewReleaseEvidence,
 } from "./review-contracts.mjs";
+import { qualifyProjectLocalCapability } from "./capability-contracts.mjs";
 
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
@@ -112,6 +113,26 @@ export async function runEngineeringRun(targetInput, options = {}) {
     return runStandardTask(target, prepared, request);
   }
   return reportModeSelection(target, prepared, request);
+}
+
+/** @param {string} targetInput @param {string} requestPath */
+export async function runCapabilityQualification(targetInput, requestPath) {
+  const target = path.resolve(targetInput);
+  await validatePreparedRuntime(target);
+  if (typeof requestPath !== "string" || requestPath.trim().length === 0) {
+    throw new Error("Capability qualification request path must be non-empty.");
+  }
+  const absolute = path.resolve(target, requestPath);
+  const relative = path.relative(target, absolute);
+  if (
+    path.isAbsolute(requestPath) ||
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`)
+  ) {
+    throw new Error("Capability qualification request must stay within the Target Project.");
+  }
+  return qualifyProjectLocalCapability(target, await readJson(absolute));
 }
 
 /** @param {string} target */
@@ -6282,17 +6303,35 @@ async function tryReadJson(file) {
 
 export async function main(args = process.argv.slice(2)) {
   let requestPath;
+  let capabilityRequestPath;
   /** @type {Record<string, string> | undefined} */
   let humanAnswers;
   let smoke = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "--smoke" && !smoke && !requestPath) {
+    if (argument === "--smoke" && !smoke && !requestPath && !capabilityRequestPath) {
       smoke = true;
       continue;
     }
-    if (argument === "--run-request" && !smoke && !requestPath && args[index + 1]) {
+    if (
+      argument === "--run-request" &&
+      !smoke &&
+      !requestPath &&
+      !capabilityRequestPath &&
+      args[index + 1]
+    ) {
       requestPath = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (
+      argument === "--qualify-capability" &&
+      !smoke &&
+      !requestPath &&
+      !capabilityRequestPath &&
+      args[index + 1]
+    ) {
+      capabilityRequestPath = args[index + 1];
       index += 1;
       continue;
     }
@@ -6311,12 +6350,14 @@ export async function main(args = process.argv.slice(2)) {
   }
   const runtimeDirectory = path.dirname(fileURLToPath(import.meta.url));
   const target = path.resolve(runtimeDirectory, "..", "..");
-  const report = await runEngineeringRun(
-    target,
-    requestPath ? { requestPath, ...(humanAnswers ? { humanAnswers } : {}) } : undefined,
-  );
+  const report = capabilityRequestPath
+    ? await runCapabilityQualification(target, capabilityRequestPath)
+    : await runEngineeringRun(
+        target,
+        requestPath ? { requestPath, ...(humanAnswers ? { humanAnswers } : {}) } : undefined,
+      );
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  return report.status === "BLOCKED" || report.status === "HUMAN_GATE" ? 1 : 0;
+  return ["BLOCKED", "HUMAN_GATE", "REJECTED"].includes(report.status) ? 1 : 0;
 }
 
 const isDirectExecution =

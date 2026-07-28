@@ -32,7 +32,7 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
     assert.equal(result.stderr, "");
     const report = JSON.parse(result.stdout);
     assert.equal(report.status, "PREPARED_PROJECT");
-    assert.equal(report.runtimeVersion, "1.1.0");
+    assert.equal(report.runtimeVersion, "1.2.0");
     assert.equal(report.projectState, ".engineering/state/project.json");
     assert.equal(report.smoke.status, "PASS");
 
@@ -42,12 +42,14 @@ test("onboarding preserves the Application Core and creates a complete pinned sh
       ".engineering/AGENTS.md",
       ".engineering/CONTEXT.md",
       ".engineering/README.md",
+      ".engineering/capabilities/registry.json",
       ".engineering/adrs/.gitkeep",
       ".engineering/plans/.gitkeep",
       ".engineering/runs/.gitkeep",
       ".engineering/specs/.gitkeep",
       ".engineering/tickets/.gitkeep",
       ".engineering/runtime/contracts.mjs",
+      ".engineering/runtime/capability-contracts.mjs",
       ".engineering/runtime/deep-contracts.mjs",
       ".engineering/runtime/doctor-contracts.mjs",
       ".engineering/runtime/engine.mjs",
@@ -114,7 +116,7 @@ test("Global Launcher onboards and delegates Engineering Runs to project-owned s
     const prepared = JSON.parse(onboarding.stdout);
     assert.equal(prepared.status, "PREPARED_PROJECT");
     assert.equal(prepared.delegated, true);
-    assert.equal(prepared.runtimeVersion, "1.1.0");
+    assert.equal(prepared.runtimeVersion, "1.2.0");
     assert.deepEqual(prepared.project, {
       status: "PREPARED_PROJECT",
       statePath: ".engineering/state/project.json",
@@ -183,7 +185,7 @@ test("replacement Global Launcher cannot replace an installed pinned runtime", a
     ]);
     assert.equal(run.code, 0, `${run.stdout}\n${run.stderr}`);
     const report = JSON.parse(run.stdout);
-    assert.equal(report.runtimeVersion, "1.1.0");
+    assert.equal(report.runtimeVersion, "1.2.0");
     assert.equal(report.status, "PREPARED_PROJECT");
     assert.deepEqual(await snapshotTree(installedRuntime), runtimeBefore);
   } finally {

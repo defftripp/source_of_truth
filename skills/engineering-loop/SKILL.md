@@ -74,7 +74,22 @@ Do not infer invocation from a request that merely resembles engineering work.
 
     `node <skill-directory>/scripts/readiness.mjs --explicit --upgrade-rollback <upgrade-rollback-token> --target <absolute-target-project>`
 
-13. If the status is `READY`, delegate the Engineering Run with `--run`:
+13. If repository and runtime evidence proves a concrete missing capability,
+    inspect and quarantine the candidate first, then qualify it through the
+    installed Project Runtime:
+
+    `node <target>/.engineering/runtime/engine.mjs --qualify-capability <project-relative-request.json>`
+
+    Do not search or qualify for ordinary work without a gap. Require verified
+    source, license, immutable revision/checksum, bounded permissions, inspected
+    scripts and instructions, maintenance, conflicts, and exact task fit.
+    Resolve the non-executing package-content assertion from the project
+    verification registry and bind it to the gap's verification evidence; it
+    does not prove behavioral execution. Automatic
+    installation is serialized and project-local only, with every installed
+    file pinned for Doctor verification. Global writes, credentials,
+    write-enabled MCP, and paid probes must stop at the returned Human Gate.
+14. If the status is `READY`, delegate the Engineering Run with `--run`:
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --run --target <absolute-target-project>`
 
@@ -98,7 +113,10 @@ fail preflight.
 - `NORMALIZATION_ROLLED_BACK` (exit `0`): the transaction token restored the
   pre-normalization project tree.
 - `HUMAN_GATE` (exit `1`): destructive or protected upgrade scope requires the
-  exact returned Migration Manifest hash; no mutation occurred.
+  exact returned Migration Manifest hash, or external capability trust/cost
+  expansion requires explicit approval; the gated external action did not run.
+- `REJECTED` (exit `1`): capability gap, supply-chain evidence, isolation, or
+  smoke qualification failed; no candidate remains installed.
 - `ROLLED_BACK` (exit `0`): the runtime upgrade token restored the prior pinned
   runtime and project state without touching the Application Core.
 - `BLOCKED` (exit `1`): the target cannot be inspected safely, required

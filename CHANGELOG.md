@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add runtime 1.2.0 Capability Qualification behind a concrete evidence-bound
+  gap. Reject incomplete or unsafe supply-chain candidates, install only into a
+  pinned project-local namespace under a crash-safe lock and pre-publication
+  journal, bind non-executing content checks to gap evidence, let Doctor detect
+  installed-file drift, roll back failed checks exactly, and persist Human
+  Gates before global writes, credentials, write-enabled MCP, or paid probes.
 - Reject sequential and parallel Worker contract violations before checkpoint,
   including out-of-lease changes, forbidden commits, explicit subagent attempts,
   partial results, ticket/code conflicts, unrelated dirtiness, and failing or

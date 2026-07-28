@@ -69,7 +69,14 @@ test("black-box FAST run reaches READY_FOR_HUMAN with isolated evidence", async 
         "READY_FOR_HUMAN",
       ],
     );
-    assert.ok(!report.stateHistory.some((/** @type {any} */ entry) => ["INTERVIEW", "SPEC", "TICKET_PLANNING", "ACCEPTED"].includes(entry.state)));
+    assert.ok(!report.stateHistory.some((/** @type {any} */ entry) => [
+      "INTERVIEW",
+      "SPEC",
+      "TICKET_PLANNING",
+      "CAPABILITY_DISCOVERY",
+      "CAPABILITY_INSTALL",
+      "ACCEPTED",
+    ].includes(entry.state)));
     assert.equal(report.qualityReview.status, "PASS");
     assert.deepEqual(
       report.verification.checks.map((/** @type {any} */ { role, status }) => ({ role, status })),
@@ -91,7 +98,10 @@ test("black-box FAST run reaches READY_FOR_HUMAN with isolated evidence", async 
     const artifactSource = (
       await Promise.all(artifactTree.map((entry) => readFile(path.join(artifactRoot, entry.path), "utf8")))
     ).join("\n");
-    assert.doesNotMatch(artifactSource, /sourceCopies|rawLogs|secrets|chatTranscripts|hello from FAST/iu);
+    assert.doesNotMatch(
+      artifactSource,
+      /sourceCopies|rawLogs|secrets|chatTranscripts|hello from FAST|capability/iu,
+    );
     assert.ok(!artifactTree.some((entry) => /interview|spec|ticket/iu.test(entry.path)));
     const durableResult = JSON.parse(await readFile(path.join(artifactRoot, "result.json"), "utf8"));
     assert.equal("stat" in durableResult.aggregateDiff, false);

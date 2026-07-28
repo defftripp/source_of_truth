@@ -24,6 +24,7 @@ const MANIFEST_PATH = ".engineering/runtime/manifest.json";
 const ADOPTION_PATH = ".engineering/runtime/upstream-adoption.json";
 const PROJECT_STATE_PATH = ".engineering/state/project.json";
 const REGISTRY_PATH = ".engineering/verification/registry.json";
+const CAPABILITY_REGISTRY_PATH = ".engineering/capabilities/registry.json";
 const RUNS_PATH = ".engineering/runs";
 const WINDOWS_POWERSHELL_PATH =
   "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
@@ -156,6 +157,7 @@ export async function diagnoseRuntime(targetInput) {
   });
 
   const registry = await readRequiredJson(target, REGISTRY_PATH, evidence, "verification-registry");
+  await inspectInstalledCapabilities(target, evidence, diagnoses);
   const smokeContract =
     registry?.checks?.find(
       (/** @type {any} */ check) => check.id === "prepared-project-smoke",
@@ -305,6 +307,182 @@ function isPreparedProjectSmokeCommand(command) {
     command[1] === ".engineering/runtime/engine.mjs" &&
     command[2] === "--smoke"
   );
+}
+
+/**
+ * @param {string} target
+ * @param {Array<Record<string, unknown>>} evidence
+ * @param {Array<Record<string, unknown>>} diagnoses
+ */
+async function inspectInstalledCapabilities(target, evidence, diagnoses) {
+  const registry = await readRequiredJson(
+    target,
+    CAPABILITY_REGISTRY_PATH,
+    evidence,
+    "capability-registry",
+  );
+  const entries = registry?.entries;
+  const ids = Array.isArray(entries)
+    ? entries.map((/** @type {any} */ entry) => entry?.id)
+    : [];
+  const registryValid =
+    registry?.schemaVersion === 1 &&
+    Array.isArray(entries) &&
+    ids.every(
+      (id) =>
+        typeof id === "string" &&
+        /^[a-z0-9][a-z0-9._-]{0,79}$/u.test(id),
+    ) &&
+    new Set(ids).size === ids.length &&
+    entries.every(isDoctorCapabilityEntry);
+  evidence.push({
+    id: "capability-registry-contract",
+    status: registryValid ? "PASS" : "INVALID",
+    path: CAPABILITY_REGISTRY_PATH,
+    entries: Array.isArray(entries) ? entries.length : null,
+  });
+  if (!registryValid) {
+    diagnoses.push({
+      kind: "CAPABILITY_REGISTRY_INVALID",
+      ownership: "PROJECT_LOCAL_CAPABILITY",
+      repairAction: "NONE",
+      evidenceIds: ["capability-registry-contract"],
+    });
+    return;
+  }
+  for (const entry of entries) {
+    const evidenceId = `capability:${entry.id}`;
+    const installRoot = path.join(target, ...entry.installPath.split("/"));
+    const inspection = await inspectDoctorCapabilityTree(installRoot, entry.files);
+    evidence.push({
+      id: evidenceId,
+      status: inspection.valid ? "PASS" : "INVALID",
+      path: entry.installPath,
+      details: inspection.errors,
+    });
+    if (!inspection.valid) {
+      diagnoses.push({
+        kind: "CAPABILITY_DRIFT",
+        capabilityId: entry.id,
+        ownership: "PROJECT_LOCAL_CAPABILITY",
+        repairAction: "NONE",
+        evidenceIds: [evidenceId],
+      });
+    }
+  }
+}
+
+/** @param {unknown} value */
+function isDoctorCapabilityEntry(value) {
+  const entry = /** @type {Record<string, any>} */ (value);
+  const files = entry?.files;
+  const filePaths = Array.isArray(files)
+    ? files.map((/** @type {any} */ file) => file?.path)
+    : [];
+  return Boolean(
+    entry &&
+    ["SKILL", "MCP", "CLI"].includes(entry.kind) &&
+    isDoctorSafeSourceUrl(entry.source) &&
+    /^[a-f0-9]{40}$/u.test(entry.revision ?? "") &&
+    /^[a-f0-9]{64}$/u.test(entry.checksum ?? "") &&
+    entry.installPath === `.engineering/capabilities/${entry.id}` &&
+    entry.smokeStatus === "PASS" &&
+    Array.isArray(files) &&
+    files.length > 0 &&
+    entry.checksum === sha256(JSON.stringify(files)) &&
+    files.every(
+      (/** @type {any} */ file) =>
+        typeof file?.path === "string" &&
+        isSafeProjectPath(file.path) &&
+        !file.path.includes("\\") &&
+        file.path.split("/").every(
+          (/** @type {string} */ segment) =>
+            /^[A-Za-z0-9._-]+$/u.test(segment) &&
+            !/[. ]$/u.test(segment) &&
+            !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu.test(segment),
+        ) &&
+        /^[a-f0-9]{64}$/u.test(file?.sha256 ?? ""),
+    ) &&
+    new Set(filePaths.map((file) => file.toLowerCase())).size === filePaths.length &&
+    entry.qualification?.provenance === "VERIFIED" &&
+    typeof entry.qualification?.license === "string" &&
+    Array.isArray(entry.qualification?.permissions) &&
+    entry.qualification.permissions.length === 1 &&
+    entry.qualification.permissions[0] === "project-read" &&
+    Array.isArray(entry.qualification?.scripts) &&
+    entry.qualification.scripts.length === 0 &&
+    entry.qualification?.instructions?.status === "COMPATIBLE" &&
+    entry.qualification?.maintenance?.status === "MAINTAINED" &&
+    Array.isArray(entry.qualification?.conflicts) &&
+    entry.qualification.conflicts.length === 0,
+  );
+}
+
+/** @param {unknown} value */
+function isDoctorSafeSourceUrl(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  try {
+    const source = new URL(value);
+    return (
+      source.protocol === "https:" &&
+      source.hostname.length > 0 &&
+      source.username === "" &&
+      source.password === "" &&
+      source.search === "" &&
+      source.hash === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** @param {string} root @param {Array<Record<string, any>>} files */
+async function inspectDoctorCapabilityTree(root, files) {
+  const expected = new Map(files.map((file) => [file.path, file.sha256]));
+  const found = new Set();
+  const errors = [];
+  /** @param {string} directory @param {string} relative */
+  const visit = async (directory, relative) => {
+    let entries;
+    try {
+      const stats = await lstat(directory);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        errors.push(`${relative || "."} is not a regular directory`);
+        return;
+      }
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      errors.push(`${relative || "."} is missing`);
+      return;
+    }
+    for (const entry of entries) {
+      const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+      const child = path.join(directory, entry.name);
+      const stats = await lstat(child);
+      if (stats.isSymbolicLink()) {
+        errors.push(`${childRelative} is a symbolic link`);
+      } else if (stats.isDirectory()) {
+        await visit(child, childRelative);
+      } else if (!stats.isFile()) {
+        errors.push(`${childRelative} is not a regular file`);
+      } else if (!expected.has(childRelative)) {
+        errors.push(`${childRelative} is not declared by the registry`);
+      } else if (sha256(await readFile(child)) !== expected.get(childRelative)) {
+        errors.push(`${childRelative} checksum does not match`);
+      } else {
+        found.add(childRelative);
+      }
+    }
+  };
+  await visit(root, "");
+  for (const file of expected.keys()) {
+    if (!found.has(file)) {
+      errors.push(`${file} is missing or invalid`);
+    }
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 /** @param {string} target @param {unknown} command */

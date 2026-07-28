@@ -65,7 +65,7 @@ without mutation. READY requires complete evidence; repairable drift and a
 resumable unfinished run are DEGRADED; missing evidence, forbidden ownership,
 and sync Human Gates are BLOCKED.
 
-Runtime manifest schema 2 pins runtime 1.1.0 and carries the explicit
+Runtime manifest schema 2 pins runtime 1.2.0 and carries the explicit
 ownership/protection policy required for automatic repair. Schema 1 / runtime
 1.0.0 Prepared Projects remain readable and may be READY when their legacy
 evidence is complete, but their missing ownership policy cannot authorize an
@@ -136,6 +136,31 @@ gap is explicit DEGRADED; missing mandatory primary evidence for any high-risk
 trigger blocks fail-closed. Context7 unavailability is DEGRADED when sufficient
 official primary evidence remains, including for high-risk work. DEGRADED never
 substitutes for missing mandatory high-risk evidence.
+
+Capability Discovery is absent from ordinary runs. It begins only from a
+structured gap that records concrete missing behavior, task evidence, and why
+each existing project/runtime capability is insufficient. Candidate
+qualification then requires verified HTTPS provenance and source, license,
+immutable revision and checksum, bounded permissions, inspected lifecycle
+scripts and instructions, maintenance evidence, conflicts, and exact task fit.
+Incomplete evidence and unsafe candidates are REJECTED before mutation.
+
+Automatic installation is limited to the project-local
+`.engineering/capabilities/<id>` namespace from a checksum-verified quarantine.
+The compact registry retains the qualification evidence and pinned identity.
+The registry also pins every installed file, and Doctor blocks on missing,
+extra, linked, or checksum-drifted content. Qualification is serialized by a
+crash-safe project-local lock; its journal precedes temporary publication and
+is recoverable only when the exact registry and installed-file identities
+match. Smoke is a non-executing package-content assertion resolved from the
+project verification registry rather than candidate input and bound to the
+missing behavior's verification evidence; it is package inspection rather than
+proof that the behavior executes correctly.
+candidate-provided executables cannot perform network or paid probes during
+qualification. Failure restores the registry and project tree exactly, and a
+bounded journal recovers interrupted publication. Global installation,
+credential access, write-enabled MCP, and paid probes persist a bounded
+hash-bound Human Gate and perform no external action.
 
 Each blocking finding is mapped one-to-one to a bounded corrective Execution
 Ticket containing its immutable source finding, blockers, Write Lease, context,

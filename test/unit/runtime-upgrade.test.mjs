@@ -127,7 +127,7 @@ test("upgrade dry-run reports the pinned runtime and upstream contract diff", as
     assert.equal(report.mutated, false);
     assert.deepEqual(report.runtimeDiff, {
       fromVersion: "1.0.0",
-      toVersion: "1.1.0",
+      toVersion: "1.2.0",
     });
     assert.deepEqual(report.upstreamDiff, [
       {
@@ -513,7 +513,7 @@ test("successful upgrade commits the pinned runtime and reruns Doctor smoke", as
     assert.equal(report.status, "READY");
     assert.equal(report.mutated, true);
     assert.equal(report.runtimeDiff.fromVersion, "1.0.0");
-    assert.equal(report.runtimeDiff.toVersion, "1.1.0");
+    assert.equal(report.runtimeDiff.toVersion, "1.2.0");
     assert.equal(report.doctor.status, "READY");
     assert.ok(
       report.doctor.evidence.some(
@@ -529,7 +529,7 @@ test("successful upgrade commits the pinned runtime and reruns Doctor smoke", as
     );
     assert.equal(
       JSON.parse(await readFile(manifestPath, "utf8")).runtimeVersion,
-      "1.1.0",
+      "1.2.0",
     );
     assert.equal(await git(target, "status", "--porcelain"), "");
     assert.deepEqual(await snapshotTree(isolatedHome), homeBefore);
@@ -649,7 +649,7 @@ test("upgrade rollback rejects a forged token outside launcher-owned temp storag
       kind: "RUNTIME_UPGRADE_ROLLBACK",
       target: await realpath(target),
       fromVersion: "1.0.0",
-      toVersion: "1.1.0",
+      toVersion: "1.2.0",
       upgradeCommit: await git(target, "rev-parse", "HEAD"),
       nonce: "00000000-0000-4000-8000-000000000000",
       entries: [],

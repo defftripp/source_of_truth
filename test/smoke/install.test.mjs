@@ -97,7 +97,7 @@ test("npx skills discovers and globally installs engineering-loop for Codex", as
     assert.equal(engineeringRun.code, 0, `${engineeringRun.stdout}\n${engineeringRun.stderr}`);
     const runReport = JSON.parse(engineeringRun.stdout);
     assert.equal(runReport.status, "PREPARED_PROJECT");
-    assert.equal(runReport.runtimeVersion, "1.1.0");
+    assert.equal(runReport.runtimeVersion, "1.2.0");
   } finally {
     await rm(isolatedHome, { recursive: true, force: true });
   }

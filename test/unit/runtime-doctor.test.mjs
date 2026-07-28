@@ -51,6 +51,120 @@ test("healthy Prepared Project diagnosis is READY and read-only", async () => {
   }
 });
 
+test("Doctor validates installed capability files and rejects drift or links", async () => {
+  const prepared = await prepareTarget("capability-drift", true);
+  const capabilitiesRoot = path.join(
+    prepared.target,
+    ".engineering",
+    "capabilities",
+  );
+  const installPath = path.join(capabilitiesRoot, "graphviz-renderer");
+  const installedFile = path.join(installPath, "index.mjs");
+  const source = 'export const render = () => "diagram";\n';
+  const files = [{
+    path: "index.mjs",
+    sha256: createHash("sha256").update(source).digest("hex"),
+  }];
+  const registry = {
+    schemaVersion: 1,
+    entries: [{
+      id: "graphviz-renderer",
+      kind: "CLI",
+      source: "https://example.test/graphviz-renderer",
+      revision: "a".repeat(40),
+      checksum: createHash("sha256")
+        .update(JSON.stringify(files))
+        .digest("hex"),
+      files,
+      installPath: ".engineering/capabilities/graphviz-renderer",
+      smokeStatus: "PASS",
+      qualification: {
+        provenance: "VERIFIED",
+        license: "MIT",
+        permissions: ["project-read"],
+        scripts: [],
+        instructions: { status: "COMPATIBLE", evidenceId: "instruction-audit" },
+        maintenance: { status: "MAINTAINED", evidenceId: "release-history" },
+        conflicts: [],
+        taskFit: {
+          missingBehavior: "Render deterministic Graphviz output.",
+          requiredBehaviorId: "render-dot-diagram",
+          evidenceIds: ["capability-gap-render-dot"],
+        },
+      },
+    }],
+  };
+  try {
+    await mkdir(installPath);
+    await writeFile(installedFile, source, "utf8");
+    await writeJson(path.join(capabilitiesRoot, "registry.json"), registry);
+
+    const healthy = await invokeDoctor(prepared.target);
+    assert.equal(healthy.code, 0, `${healthy.stdout}\n${healthy.stderr}`);
+    assert.ok(
+      JSON.parse(healthy.stdout).evidence.some(
+        (/** @type {any} */ entry) =>
+          entry.id === "capability:graphviz-renderer" && entry.status === "PASS",
+      ),
+    );
+
+    const coordinatedRegistry = structuredClone(registry);
+    coordinatedRegistry.entries[0].files[0].sha256 = createHash("sha256")
+      .update("tampered\n")
+      .digest("hex");
+    await writeFile(installedFile, "tampered\n", "utf8");
+    await writeJson(
+      path.join(capabilitiesRoot, "registry.json"),
+      coordinatedRegistry,
+    );
+    const coordinatedTamper = await invokeDoctor(prepared.target);
+    assert.equal(
+      coordinatedTamper.code,
+      1,
+      `${coordinatedTamper.stdout}\n${coordinatedTamper.stderr}`,
+    );
+    assert.ok(
+      JSON.parse(coordinatedTamper.stdout).evidence.some(
+        (/** @type {any} */ entry) =>
+          entry.id === "capability-registry-contract" &&
+          entry.status === "INVALID",
+      ),
+    );
+
+    await writeJson(path.join(capabilitiesRoot, "registry.json"), registry);
+    await writeFile(installedFile, "tampered\n", "utf8");
+    const drifted = await invokeDoctor(prepared.target);
+    assert.equal(drifted.code, 1, `${drifted.stdout}\n${drifted.stderr}`);
+    const driftedReport = JSON.parse(drifted.stdout);
+    assert.equal(driftedReport.status, "BLOCKED");
+    assert.ok(
+      driftedReport.diagnoses.some(
+        (/** @type {any} */ entry) => entry.kind === "CAPABILITY_DRIFT",
+      ),
+    );
+
+    await rm(installPath, { recursive: true });
+    const externalDirectory = path.join(prepared.sandbox, "external-capability");
+    await mkdir(externalDirectory);
+    await writeFile(path.join(externalDirectory, "index.mjs"), source, "utf8");
+    await symlink(externalDirectory, installPath, "junction");
+    const linked = await invokeDoctor(prepared.target);
+    assert.equal(linked.code, 1, `${linked.stdout}\n${linked.stderr}`);
+    assert.ok(
+      JSON.parse(linked.stdout).evidence.some(
+        (/** @type {any} */ entry) =>
+          entry.id === "capability:graphviz-renderer" &&
+          entry.status === "INVALID" &&
+          entry.details.some((/** @type {string} */ detail) =>
+            /symbolic link|not a regular directory/iu.test(detail),
+          ),
+      ),
+    );
+  } finally {
+    await rm(prepared.sandbox, { recursive: true, force: true });
+  }
+});
+
 test("legacy #18 Prepared Project remains READY without gaining automatic repair authority", async () => {
   const prepared = await prepareTarget("legacy-prepared-project", true);
   const manifestPath = path.join(prepared.target, ".engineering", "runtime", "manifest.json");
