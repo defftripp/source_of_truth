@@ -12,6 +12,7 @@
     "test": "node --test \"test/unit/*.test.mjs\"",
     "test:install-smoke": "node --test test/smoke/install.test.mjs",
     "test:platform-smoke": "node --test test/smoke/platform.test.mjs",
+    "qualify": "node skills/engineering-loop/scripts/qualify.mjs --target .",
     "verify": "npm run typecheck && npm test && npm run test:install-smoke && npm run test:platform-smoke"
   },
   "devDependencies": {

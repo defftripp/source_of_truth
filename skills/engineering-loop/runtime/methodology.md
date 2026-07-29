@@ -162,6 +162,17 @@ bounded journal recovers interrupted publication. Global installation,
 credential access, write-enabled MCP, and paid probes persist a bounded
 hash-bound Human Gate and perform no external action.
 
+## V1 qualification
+
+Repository qualification is a separate maintainer command. Its pinned manifest
+maps mandatory project-state fixtures, adversarial orchestration scenarios, and
+component contracts to exact public black-box tests. The aggregate is PASS only
+when every named test emits exact PASS evidence, Windows platform smoke passes,
+and a deny-list scan confirms the bounded report contains no secrets, signed
+URLs, raw child logs, provider payloads, or chat transcript. Reviewer opinion
+cannot override a failed mandatory result. Additional Linux execution remains
+an explicit V1 limitation until evidence is supplied.
+
 Each blocking finding is mapped one-to-one to a bounded corrective Execution
 Ticket containing its immutable source finding, blockers, Write Lease, context,
 and targeted verification contract. Root appends those tickets to the same

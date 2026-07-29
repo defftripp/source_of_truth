@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a reproducible V1 qualification command with a pinned black-box fixture,
+  adversarial scenario, and component coverage manifest; any mandatory failure,
+  missing Windows evidence, or redaction finding blocks the bounded report.
 - Add runtime 1.2.0 Capability Qualification behind a concrete evidence-bound
   gap. Reject incomplete or unsafe supply-chain candidates, install only into a
   pinned project-local namespace under a crash-safe lock and pre-publication

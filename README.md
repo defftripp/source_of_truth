@@ -364,6 +364,26 @@ never automatic. Any such request writes a bounded hash-bound artifact under
 `.engineering/capabilities/human-gates/`, returns `HUMAN_GATE`, and performs no
 external action.
 
+## V1 qualification suite
+
+Run the reproducible black-box qualification from the repository root:
+
+```text
+npm run qualify
+```
+
+The command invokes pinned public launcher/runtime tests for the mandatory
+project-state fixtures, adversarial scenarios, and deterministic component
+contracts. It writes only a bounded redacted report to
+`.engineering/qualification/v1-report.json`; child stdout/stderr, raw provider
+payloads, and chat transcripts are never persisted. Every mandatory result,
+the Windows platform smoke, and the report deny-list scan must pass or the
+command exits non-zero with `BLOCKED`. Linux execution is recorded as an
+explicit V1 limitation rather than fabricated evidence. Each temporary
+black-box repository emits only a bounded scan summary before cleanup; staged
+Run Artifacts and checkpoint history are scanned, while pre-Git bootstrap
+fixtures are recorded explicitly as `NOT_APPLICABLE`.
+
 Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
 
 ```json

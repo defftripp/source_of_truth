@@ -93,6 +93,12 @@ Do not infer invocation from a request that merely resembles engineering work.
 
    `node <skill-directory>/scripts/readiness.mjs --explicit --run --target <absolute-target-project>`
 
+15. Maintainers qualifying this V1 repository run
+    `npm run qualify` from the repository root. Treat the generated bounded
+    report as black-box evidence only when every mandatory fixture, adversarial
+    scenario, component contract, Windows platform smoke, and deny-list scan
+    passes. Never persist child logs or chat transcripts in the report.
+
 The delegated executable must be the installed
 `.engineering/runtime/engine.mjs`. Never replace it with files from the Global
 Launcher. Never apply a manifest whose approved hash or current source hashes

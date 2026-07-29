@@ -1,0 +1,1421 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "codex-engineering-loop-v1",
+  "status": "PASS",
+  "terminal": true,
+  "rawLogsPersisted": false,
+  "chatTranscriptPersisted": false,
+  "failedMandatoryIds": [],
+  "scenarioResults": [
+    {
+      "id": "simple-without-bureaucracy",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/fast-run.test.mjs:a small cross-file task completes the FAST lifecycle without spec or tickets",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "ambiguous-task",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/standard-run.test.mjs:ambiguous STANDARD records research before one durable decision gate and never starts Worker",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "missing-tests",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/advisor-gate.test.mjs:Advisor REVISE reports MISSING_VERIFICATION before Worker",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "ticket-code-conflict",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/deep-parallel-run.test.mjs:a conflicting Worker result creates BLOCKED corrective work without changing accepted integration",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "failed-advisor",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/advisor-gate.test.mjs:two unresolved Advisor REVISE rounds create a terminal Human Gate before Worker",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "partial-worker",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/worker-contract-rejection.test.mjs:partial-worker is rejected before a Root checkpoint",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "false-green-review",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/fast-run.test.mjs:a passing Quality Review cannot override a failing instrumental check",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "scope-expansion",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/fast-run.test.mjs:FAST blocks output beyond the exact Write Lease before committing",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "overlapping-writers",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/deep-parallel-run.test.mjs:overlapping DEEP Write Leases execute strictly sequentially",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "restart-after-interruption",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/deep-parallel-run.test.mjs:resume discards and replays a bounded pre-commit Worker result from durable HEAD",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    }
+  ],
+  "componentResults": [
+    {
+      "id": "classifier",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/mode-policy.test.mjs:the public policy contract excludes file count from Task Profile evidence",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "state-transitions",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/standard-run.test.mjs:one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecycle",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "artifact-schemas",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/review-contracts.test.mjs:generic PASS without evidence is rejected",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "manifest-hashing",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/normalization.test.mjs:Migration Manifest is complete and its hash binds every path and action",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "ownership",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/runtime-doctor.test.mjs:working-tree ownership metadata without a committed manifest is never READY",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "git-safety",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/fast-run.test.mjs:FAST prevents protected ref mutation and preserves main",
+        "exit-code:0"
+      ]
+    },
+    {
+      "id": "sync-divergence",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/standard-run.test.mjs:remote divergence stops at a Human Gate without overwriting either history",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "capability-qualification",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/capability-qualification.test.mjs:the installed Project Runtime exposes explicit capability qualification",
+        "exit-code:0"
+      ]
+    }
+  ],
+  "fixtureResults": [
+    {
+      "id": "new-project",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/onboarding.test.mjs:Global Launcher onboards and delegates Engineering Runs to project-owned state",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "unprepared-legacy",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/normalization.test.mjs:exact hash approval applies a legacy manifest and reaches Prepared Project",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "healthy-prepared-project",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/runtime-doctor.test.mjs:healthy Prepared Project diagnosis is READY and read-only",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "drifted-runtime",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/runtime-doctor.test.mjs:missing and drifted owned generated runtime files are repairable and dry-run is read-only",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "dirty-worktree",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/fast-run.test.mjs:FAST restores and blocks direct mutation of the Integration worktree",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "remote-divergence",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/standard-run.test.mjs:remote divergence stops at a Human Gate without overwriting either history",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    },
+    {
+      "id": "interrupted-resume",
+      "status": "PASS",
+      "evidenceIds": [
+        "test:test/unit/standard-run.test.mjs:interrupted STANDARD graph resumes from durable state without chat history",
+        "exit-code:0",
+        "fixture-artifact-scans:1"
+      ]
+    }
+  ],
+  "platform": {
+    "current": "win32",
+    "required": "win32",
+    "status": "PASS",
+    "evidenceIds": [
+      "test:test/smoke/platform.test.mjs:platform smoke returns the expected exit code and status",
+      "exit-code:0"
+    ]
+  },
+  "additionalPlatform": {
+    "platform": "linux",
+    "status": "V1_LIMITATION",
+    "reason": "Additional platform execution is documented but not mandatory in V1."
+  },
+  "denyList": {
+    "status": "PASS",
+    "findings": [],
+    "scannedPaths": 1,
+    "scannedRevisions": 0,
+    "fixtureScans": [
+      {
+        "evidenceId": "new-project",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 0,
+        "scannedRevisions": 0,
+        "repositoryStatuses": [
+          "NOT_APPLICABLE"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "unprepared-legacy",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 0,
+        "scannedRevisions": 0,
+        "repositoryStatuses": [
+          "NOT_APPLICABLE"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "healthy-prepared-project",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "drifted-runtime",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "dirty-worktree",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "remote-divergence",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 2,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "interrupted-resume",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 5,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "simple-without-bureaucracy",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 3,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "ambiguous-task",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 2,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "missing-tests",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "ticket-code-conflict",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 3,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "failed-advisor",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "partial-worker",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "false-green-review",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "scope-expansion",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 1,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "overlapping-writers",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 6,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      },
+      {
+        "evidenceId": "restart-after-interruption",
+        "status": "PASS",
+        "scannedTargets": 1,
+        "scannedPaths": 1,
+        "scannedRevisions": 6,
+        "repositoryStatuses": [
+          "SCANNED"
+        ],
+        "findings": []
+      }
+    ]
+  },
+  "suiteValidation": {
+    "valid": true,
+    "errors": []
+  },
+  "execution": {
+    "seam": "BLACK_BOX_PUBLIC_RUNTIME",
+    "suiteHash": "26de612dd877e2ceeb0411a8883bd95cc801eb2f7f708f2104df59bc097e5b86",
+    "sourceFingerprint": "72581854300ae4662dbfb9dc36cac31dff93239e78bbe055fe9f7d40e1601704",
+    "sourceFiles": [
+      {
+        "path": "package-lock.json",
+        "sha256": "cb520f8397b7be6eb5259535959e76c3346dc36addfb0e5c50fbd17fed879977"
+      },
+      {
+        "path": "package.json",
+        "sha256": "907cb1f74411cf19c611cccc143c82ead1f9cd5b16c029d0315a243d3c2ea29e"
+      },
+      {
+        "path": "skills/engineering-loop/SKILL.md",
+        "sha256": "1fb1c9f3026f8e663e9eb4c88d7c703aa8646531289849c2828d144222b6cca3"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/capability-contracts.mjs",
+        "sha256": "9acaa3eaf7c0f111777508a57c5d7b77951bb2a865d8de34f240d0e4d22bda36"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/contracts.mjs",
+        "sha256": "09753db7369f501a615a59bb5e71db5ebb3e852a228c595fe87358557b4c39d3"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/deep-contracts.mjs",
+        "sha256": "768411bbe687a9b87be6ab3fee6d2d1d2ac7c96284734ac45006497579a9ab58"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/doctor-contracts.mjs",
+        "sha256": "5b88d18c2296e04a0f1c2e6f1098f58eba4f4506b4a6a999bdefce5acd8ad12d"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/engine.mjs",
+        "sha256": "8291ddf31924defc816b0be03964836d267b07b14fb578589401d19a2573ef09"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/fitness-contracts.mjs",
+        "sha256": "a0392bc0b400e9955da224ed6d41086dc7068783b7fb883c801fa874f3f679b4"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/methodology.md",
+        "sha256": "dd62add0f9f08e1fac0b4ffadcec0fccac11d0c8cc5460b9482ac5ffaa5e697d"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/mode-policy.mjs",
+        "sha256": "95486d0c57cf1527eb16fd83fd9bdb4b06ed21e42b38874218a783a0fc20f541"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/parallel-eligibility.mjs",
+        "sha256": "8c5951326dfd9a3f10264e65849ac84dd94c084a1dbf9f4e2fcd9ff3942c234a"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/review-contracts.mjs",
+        "sha256": "29c9755f1dd074b4fa26e1362da75c01c2529ee4963f734744639b4b5a902c66"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/upgrade-contracts.mjs",
+        "sha256": "97c4d0f7e3fd685c18ec1162e2feedc8d1b779bfb3f19024295ae30fda1c9a69"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/apply.mjs",
+        "sha256": "92935eb4ff5d3c1b6312b606a95d3b4cd4a06ae652425fef3cf8c65613381357"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/normalize.mjs",
+        "sha256": "82af7cbbf0e4fe5f361059262e66ef52c9fb1bfd82e4d7cca9203aa7b5064c98"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/onboard.mjs",
+        "sha256": "079f070ab849e98fc829cab08f244e7b97d4759e6a967be49ff1fda911f97237"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/qualify.mjs",
+        "sha256": "3d0a5b76ec8d0579822a8b377427872817f3f630bd191a3b3814a950effe318d"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/readiness.mjs",
+        "sha256": "db2bdf9e60cce626afc570827c98f06a08765015b3caf139fcca59c6846f1b89"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/shell.mjs",
+        "sha256": "870f92a3aed7a37d9cf1f1926fbaa9aaab823a5bc18f06dfa74092584947aa48"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/conflicting-worker-request.json",
+        "sha256": "016e71084609f50104eff510cbdbfda9f0ac8999507c7968ab94e98270175c4f"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/disjoint-request.json",
+        "sha256": "dd99919cbbcf7928b2fcb8ac989d3b12ee2169f1fd9a2820d5a370548ba31525"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/forbidden-new-path-request.json",
+        "sha256": "9c2d5db1867d60099f679cda9b8eba50acd6de3671cba50aecb41ee3b1743232"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/forbidden-worker-request.json",
+        "sha256": "5ec74d249324fe5c64fea3a1b25ec92549b6f0883f54851b34149b5a0435b448"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/mutating-targeted-request.json",
+        "sha256": "82c45e2b16381282e19c1d8a861da85e8ff7b9d5df592db8f271d193ab71cb1c"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/overlapping-contract-request.json",
+        "sha256": "9f3a40f2d78740ef5e9b42b9697d30b954fa1104af0825d75710129476cea3b8"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/overlapping-lease-request.json",
+        "sha256": "7f147e15057da64ac2c37d0b8cb29b134385f7392d9fb3576b03bb92a8c288ee"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/package.json",
+        "sha256": "1bf0e53fc74b05f1aade7451fbac72f1944b067d4229d96bae7a225519a250e4"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/advisor.mjs",
+        "sha256": "3e8610424dd7346a47fb98bdf94fa4199c969b1ca3451838b13313498839b1db"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/build.mjs",
+        "sha256": "6ef50beaa8a8da6e9eba5b166aa2522fece212511736ac63efb5b0f0b7beb7d5"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/full-overlap.mjs",
+        "sha256": "65f20dc7841b2f1f9e03a872c9f9f1074d475b04dde8c6f7a655330951dddc25"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/observe.mjs",
+        "sha256": "15ff85502111e5e4fb7a5acb022ab3b98513368e048366a91341db33aa7cd5f6"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/planner.mjs",
+        "sha256": "afac47199ea89b8ae531bb3862bdf9545d814ba525c39394065e26d24662018f"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/research.mjs",
+        "sha256": "e10edde88ca8cbe781cbdee1fae7bb4c18793e16ad6a453c424ddec6caac2a8c"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/review.mjs",
+        "sha256": "4bbaf08923794b22c89355f539d1179d904208ca38b553e9de4037bd95e26206"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/ticket-verification.mjs",
+        "sha256": "061b6bf2177903c24104589377ef1308825befa692320aa6377f93defef3d58e"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/scripts/worker.mjs",
+        "sha256": "0ba4bb3b0d98bf0a4effd43a97560a8b9a75799d91af74c7dcf00085dfd0c1f9"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/src/a.mjs",
+        "sha256": "8b61258b8632694f6ccc180e33fd904faf378dacbe035c875d0a35a389e53b25"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/src/b.mjs",
+        "sha256": "202675a0f1afa333fd1d1c3f0e1f9ebe2e8d9fc58280aeddb4fec81eb373a416"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/test/parallel.test.mjs",
+        "sha256": "9278ae327f5f169b9f2e5fc9e6135987924dea33994e2b9784c5950d78de9ab8"
+      },
+      {
+        "path": "test/fixtures/deep-parallel-run/verification-registry.json",
+        "sha256": "91e256b346f407a013789a2150423517fd5d127792e49a00aecebe66e2c3158f"
+      },
+      {
+        "path": "test/fixtures/deep-run/changed-scope-request.json",
+        "sha256": "a8b3aee0c8cfe34f7d57b321c10e6932f203b1f4c280312ed0c82f83c1fc9747"
+      },
+      {
+        "path": "test/fixtures/deep-run/deep-request.json",
+        "sha256": "56f6d917d1d0b6a026d850d34da8d840eed2e9e0e9ad03914d2584dd93dc4291"
+      },
+      {
+        "path": "test/fixtures/deep-run/missing-evidence-request.json",
+        "sha256": "19e3a227a02a3b43c5286a2e036e258457ef3458796359ba5308835330361154"
+      },
+      {
+        "path": "test/fixtures/deep-run/package.json",
+        "sha256": "ccdf8de44295f59be00f6b8cf1359959938a16a4ccf8c55940d8af1894748c5f"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/advisor.mjs",
+        "sha256": "3e8610424dd7346a47fb98bdf94fa4199c969b1ca3451838b13313498839b1db"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/build.mjs",
+        "sha256": "569e534fe230ec788af672d1fd4d0fa1f42db97392c10afeff4ad132a257566e"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/observe.mjs",
+        "sha256": "569e534fe230ec788af672d1fd4d0fa1f42db97392c10afeff4ad132a257566e"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/planner.mjs",
+        "sha256": "4b1682d4ca255a1ffdb8c9ef7d83b7e4358f1d66944326cf7aab47c30c25fedd"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/quality-review.mjs",
+        "sha256": "20988b77c91785b0ed8e8f608ac2646b98ee088495272fee5f021d91616d708b"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/research.mjs",
+        "sha256": "24eda70ee2b0db2048f289277482038ec282d90f7d19f555f9920d4edba0f158"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/spec-review.mjs",
+        "sha256": "3ea2dd2f3190c63581b14355d9ab02ba5fccf35e051e13f6a335537f9c9619d0"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/ticket-verification.mjs",
+        "sha256": "c87f9744fa4016a8cdc8751010456ea32d0090e10f268c5d4a30ad96415f333b"
+      },
+      {
+        "path": "test/fixtures/deep-run/scripts/worker.mjs",
+        "sha256": "80493ffe297ca5555a6d6d8868df46261b752fce156743e7f6121a4817047560"
+      },
+      {
+        "path": "test/fixtures/deep-run/src/payment.mjs",
+        "sha256": "c0cf8a6696aedd57cafa4253422c8b73560dddf7d8fa8acb2907f143268c687f"
+      },
+      {
+        "path": "test/fixtures/deep-run/test/payment.test.mjs",
+        "sha256": "891f50eec297ad2d4622f0ea642e356f79d05dca57423d5d4d74cb91b72aa843"
+      },
+      {
+        "path": "test/fixtures/deep-run/verification-registry.json",
+        "sha256": "e530ccecf2012f96ef75656157609a7ff285d9c492b0d87997471727d73b1608"
+      },
+      {
+        "path": "test/fixtures/fast-run/artifact-forgery-request.json",
+        "sha256": "4a2bae209aac0ebf34cc833fb6b75f6d614888fd005abf649d41a35d8e19136c"
+      },
+      {
+        "path": "test/fixtures/fast-run/commit-bypass-request.json",
+        "sha256": "0c628a2bc3ccf1b85e08c565c925593b21a70ef6119380adf1699c48dbc0a46b"
+      },
+      {
+        "path": "test/fixtures/fast-run/commit-reset-request.json",
+        "sha256": "4a3c66ebf81c98919124a2dccf22654ac00c23a9c8905c54c0c4fb1053effcee"
+      },
+      {
+        "path": "test/fixtures/fast-run/cross-file-request.json",
+        "sha256": "062568b258d614bdfac15444338f33e41449dc908279effe1b915d3c022598c9"
+      },
+      {
+        "path": "test/fixtures/fast-run/deleted-protected-ref-request.json",
+        "sha256": "abdccf2ae23ad6c8449797e99417e485b79fe13ae63196fa306807894dcf8420"
+      },
+      {
+        "path": "test/fixtures/fast-run/dirty-integration-request.json",
+        "sha256": "b82fdf23a074f911d5006984525d76648142ef30061b54a3bbb165e0a9ebdf37"
+      },
+      {
+        "path": "test/fixtures/fast-run/duplicate-registry.json",
+        "sha256": "16058a9ec9479d1a69e0beea1077bf685863c66ff589a4916d29c042dd2388f7"
+      },
+      {
+        "path": "test/fixtures/fast-run/extra-artifact-request.json",
+        "sha256": "70b71a8549bd38ec82de7bd6efdf88270668e2130d58e372dacfffb978ba36a4"
+      },
+      {
+        "path": "test/fixtures/fast-run/false-green-request.json",
+        "sha256": "a04e328d0b59db8389a3bd145ed0e69b9b7b1c9d71ba9d71fd8bcd218c2b1900"
+      },
+      {
+        "path": "test/fixtures/fast-run/fast-request.json",
+        "sha256": "c39d5eafafb0367797bd304262d453949f1760c64f8129c35f019ebc4af6121d"
+      },
+      {
+        "path": "test/fixtures/fast-run/incomplete-request.json",
+        "sha256": "e610f1eeaf60c7bb3e71cba5ea79d58794e0de3cc82300213b82b82d54fdb11e"
+      },
+      {
+        "path": "test/fixtures/fast-run/incomplete-verification-registry.json",
+        "sha256": "fbd3254beace959ebeb1c5503bdb8ab95d70928183e494533609df1bbafa4163"
+      },
+      {
+        "path": "test/fixtures/fast-run/noncanonical-lease-request.json",
+        "sha256": "82478170109ae99bc465123310c03361bcd6c75e21e92f6fa26d34de0e0cbb8f"
+      },
+      {
+        "path": "test/fixtures/fast-run/package.json",
+        "sha256": "b21afe9e2f18d9ad7c89562ef777bc977a096423f8a8c714c33e654589b91664"
+      },
+      {
+        "path": "test/fixtures/fast-run/protected-ref-request.json",
+        "sha256": "78e2a21b619681b635c5464e3f7bbbc0fe9241b6b512420cd3070840af33fad0"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/add-extra-run-artifact.mjs",
+        "sha256": "b2b51a368172d3ba39065e876ae0c7adbdf2c5792744e8f8ad939d8afd4380a4"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/apply-change.mjs",
+        "sha256": "02640c7a0d0b16d6b365e31bf3adc126d6aa8b025617a1c68a6311a3ca8adf75"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/apply-cross-file-change.mjs",
+        "sha256": "83c34f950015aaa39a067d03ff077614f7708eeb3469795f7a4b343040c293e0"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/build.mjs",
+        "sha256": "8185c8845182a6bbd737c720de49234233aeabac5f7716e1d835a5aeb94f1f69"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/check-git-status.mjs",
+        "sha256": "65c66a070bee133f7622692a5d44e3b995cad1c7e09fd5b7d31778f5ffb27e71"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/commit-outside-lease.mjs",
+        "sha256": "2a0b3d430105ecbd2b63a8fc5d7a1be80e8069e600a9d464532108e1f588e9ce"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/commit-then-reset.mjs",
+        "sha256": "e26f55e36a18ad030749026b3936a9e48a8488b3ae6737727aa22465c6b07de5"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/delete-protected-ref-and-dirty-integration.mjs",
+        "sha256": "b1245af3a09062f060ad33ad45748bd3385f204928423f2f304ff24fa1a854c1"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/dirty-integration-worktree.mjs",
+        "sha256": "48db2564ed02fb29cd869de8a6a3384f7e73ea6ec8473faa673c34f2e3f52ab9"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/false-green.mjs",
+        "sha256": "3ea82bd0e606571f4fe7ad482fe970838a810da1fdb76ccd6621d44a71b2cf4e"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/filter-forge.mjs",
+        "sha256": "aa6fa1b6ab081275dc7fa714a5bd77e69b1c74e649c8a3d874b9b3e43d97c55d"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/filter-pass.mjs",
+        "sha256": "d2401284818f51aab7f2938821d769435a79a797a206107d8cc8b4ec5214b11c"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/forge-run-artifact.mjs",
+        "sha256": "706d690933e6841bfe015efaa32931c4229549ea88ed382a2554174b22255e30"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/leak-raw-log.mjs",
+        "sha256": "b0de71bbcd330121ed817e6eada84c0a732585abc200a5654291e17da524a702"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/mutate-main-ref.mjs",
+        "sha256": "37762bebfa30180e3b8f2a1bd7952f5701b0a38909055add190be33a6b08034e"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/observe.mjs",
+        "sha256": "8185c8845182a6bbd737c720de49234233aeabac5f7716e1d835a5aeb94f1f69"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/quality-review.mjs",
+        "sha256": "00e75ab57df020045d925ca9d7a20e2ebd33032ece0bb6aeae9208511a4259ea"
+      },
+      {
+        "path": "test/fixtures/fast-run/scripts/unsafe-quality-review.mjs",
+        "sha256": "8ee02294b99f2996b7ca171fe62e91c5a2b9c88070367a70127b6ac566fe5d4a"
+      },
+      {
+        "path": "test/fixtures/fast-run/src/message.mjs",
+        "sha256": "a209a7384ee677d3439cf25ff82984d7e2db65339a1959253dba4c0a9ccc3a51"
+      },
+      {
+        "path": "test/fixtures/fast-run/src/suffix.mjs",
+        "sha256": "a707655725ecfd83778be8b272e67bb082862b87d9db627b3189494beef69a71"
+      },
+      {
+        "path": "test/fixtures/fast-run/status-check-request.json",
+        "sha256": "b4c287ebb8f4338eac4e3f458f4c5668e058bc684f3b7fabe3d9ed90eaefb1b6"
+      },
+      {
+        "path": "test/fixtures/fast-run/test/cross-file.test.mjs",
+        "sha256": "bd7d8555116a0cf3786fa726dfaa2a3bc2b7a98b4337d260013a30241ce21202"
+      },
+      {
+        "path": "test/fixtures/fast-run/test/message.test.mjs",
+        "sha256": "235add9b23dd6112964420a58cb4671dc0be3e19419d6e846fa640d0b01b5035"
+      },
+      {
+        "path": "test/fixtures/fast-run/unsafe-output-request.json",
+        "sha256": "8e74c6a15940ce00f5d4bc9431157217730d7a03f67d0e5c33194b56146fa5d1"
+      },
+      {
+        "path": "test/fixtures/fast-run/unsafe-quality-request.json",
+        "sha256": "b13fae2f4952d0c328c349cab78002ab41601826b7f5d343bbf1dbad924a0165"
+      },
+      {
+        "path": "test/fixtures/fast-run/verification-registry.json",
+        "sha256": "0918666d4a7948781e36f17c04e4f7e280b51f3aad742d3c016d0414d5dd2fa5"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.cache/debug.py",
+        "sha256": "c85fba1673821b6445c87398af9287e4c9106bc8b398ca58830aad8cc0d79944"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.cursor/rules/project.mdc",
+        "sha256": "fe712eaff3731bf9a64187e923e8232607b4cc33ad135bc0e59b22d0e9334867"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.custom-tool",
+        "sha256": "514139675e8327f05673ba465351d3427c93403de030a5a6d71efffe3407b2d2"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.engineering/CONTEXT.md",
+        "sha256": "d134e047753642d148dfff37993fadbaac722f15dd000705817dd606a1a82429"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.env.production",
+        "sha256": "c89f9f155aa1235c943bcceb898a7423458e05da11146467c6e472cd098db25c"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.github/workflows/.env.production",
+        "sha256": "b58c25787a43ddb70ef76837be2b188795d948e2f4b7c29683cf6233f250576c"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.kube/config",
+        "sha256": "efdcc208ced078b8c94ab577be2bec7caf084b2b5b21278eb9670163e342d0bc"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/.ssh/id_rsa",
+        "sha256": "30c56b3968281ef93b182401c3f070576be094f52d57e4e90c01b8ca412ed749"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/AGENTS.md",
+        "sha256": "3d6f70f9d930f6678d2a0207a47fe077679bacf207ed9ea781f4e6a786717c81"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/agents/credentials.json",
+        "sha256": "56b517ee680a153b95895077c8e46e06179d7f1742d007657837a31a2a0f684d"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/backend/domain.py",
+        "sha256": "42ca78f2132a9f2f2a4e4e86a03ee7933f273f48a6a7ffa14a8dfcbadac4e31d"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/build/generated.ts",
+        "sha256": "5e87baecedb6950cabbff2e7d12ab16fd8255cca626bb1dc7e17d91ea4b9b760"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/config/credentials.json",
+        "sha256": "56b517ee680a153b95895077c8e46e06179d7f1742d007657837a31a2a0f684d"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/docs/signing.key",
+        "sha256": "3a01fdbbd0db9c6e74da04a271a6db3987165fc61c20b5f366fcae00435f37c7"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/notes.txt",
+        "sha256": "72b73d04d2e992bbf35c46a2bcf03d93938d70a82594d70e8308900bc91bc299"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/secrets/signing.key",
+        "sha256": "2949a9f3651f895b37f3d76e09cb9f12776ae18f8f2816b19f39462a346fc45f"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/src/app.mjs",
+        "sha256": "1d80d643cbc398c82378581ecbb60f96a86c438d30080afb3e57d3603f56ef4a"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/tmp/scratch.sql",
+        "sha256": "a2efbdcd209e877d7c15164011fb713d9ecdc99ae8e5a695823aa8b1ac03b13f"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/token.json",
+        "sha256": "56b517ee680a153b95895077c8e46e06179d7f1742d007657837a31a2a0f684d"
+      },
+      {
+        "path": "test/fixtures/legacy-adversarial/vendor/plugin.js",
+        "sha256": "9495b3e0f6006016685279975777ea9446021bc12d333ca47e91e7b33cde048e"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/.cursor/plans/legacy.md",
+        "sha256": "df837b3e02db219958121caf87e00d9822389393f1e480aa9fdc5fba0d01853e"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/AGENTS.md",
+        "sha256": "0257eaea5a90af344f50f7bf06bd255740e853dba1e3bb8191ed8940790e57cd"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/agents/planner.md",
+        "sha256": "4eba15f1d3e8020f0986de9488f69c1c5a4617bd28788683840e878c01156d35"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/content/post.md",
+        "sha256": "eded979a079a5d714627a10d2c7de6ce3ddcb132ea3378032bdb5a9f755deaa5"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/develop/TODO.md",
+        "sha256": "aa6f47be95d8e902b0c55fd4a2da465432230ce75425e5dd86d238d24f3e04f3"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/hooks/pre-implementation.md",
+        "sha256": "251c52228490969165f7a949dc030c22bdca9a0f965f0409aec362f6d7e4745e"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/hugo.toml",
+        "sha256": "97976dab30f8c633f6c10d762209ba39d5b3e806083f1c408fd1ef3de45b5170"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/layouts/index.html",
+        "sha256": "6ffd4c4e45a94caaa2c2d9898c373c8cb80d1fccb3cbe2c765c0bd50a955a922"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/memory/MEMORY.md",
+        "sha256": "4769208fc3608e960b406922d4581dc8f81064d76b3c6c0872d11c47d68b4aa4"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/playbooks/feature.md",
+        "sha256": "be08b99006d6a4b9578efcd22ab1702f4ff005f61ae2a2862fefe6484f3020fd"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/registries/capabilities.json",
+        "sha256": "24a0920574d32f1ef7acfdaa2af876ff4c48af3bb8f3473f91c84b582a977462"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/rules/testing.mdc",
+        "sha256": "a58e22a4195a4d9c117a3a5f7e982369e95b3336e0f6d50016fe0820107a29a1"
+      },
+      {
+        "path": "test/fixtures/legacy-canon/static/llms.txt",
+        "sha256": "ece7ba5c63e160e2b91231cd531ff9bad8285889dfc22ac0a52830f23030327a"
+      },
+      {
+        "path": "test/fixtures/legacy-node/.github/workflows/ci.yml",
+        "sha256": "891374321e387caad1a2a50f8c3698ed86d3578266930db27df93443f23590e8"
+      },
+      {
+        "path": "test/fixtures/legacy-node/.gitignore",
+        "sha256": "ee07d8e0c77573a9b108ff251cd4c71d5df13408409947aba8599cf7c312a692"
+      },
+      {
+        "path": "test/fixtures/legacy-node/Dockerfile",
+        "sha256": "94a093c9f56b762561f9dfafcbadb2f74a363c5388aeceb9ed0b1c840ebab9c3"
+      },
+      {
+        "path": "test/fixtures/legacy-node/Makefile",
+        "sha256": "5bc86ad32e6e3931fa87120f3ff65f712990a64b3282fc884b522c8f8d60aacf"
+      },
+      {
+        "path": "test/fixtures/legacy-node/README.md",
+        "sha256": "09485335ef3c2d18aa5f8f90845f808fe0343f5e7b006bfeef666b8cb88317ce"
+      },
+      {
+        "path": "test/fixtures/legacy-node/package-lock.json",
+        "sha256": "7c6682c671b9249442bf61a6242099e6777eac5ed7adebcd154971e2a0b15fc3"
+      },
+      {
+        "path": "test/fixtures/legacy-node/package.json",
+        "sha256": "96da001d281e390ba0040b4b52c7e81a0f1fde4914015764e916b9d719fc5e1a"
+      },
+      {
+        "path": "test/fixtures/legacy-node/src/app.mjs",
+        "sha256": "ba869c327c46906446707e0b54537139571fecc8b297636505290fadacecc520"
+      },
+      {
+        "path": "test/fixtures/legacy-node/tsconfig.json",
+        "sha256": "4c57d9f56b3baa94c5430a7e39cee319ccd54f451cef320bada430fb251215aa"
+      },
+      {
+        "path": "test/fixtures/legacy-python/pyproject.toml",
+        "sha256": "83cd2f75cd479cb42e92c76d4bdc77961b99d8e13a89ea0019430fbccd5eac71"
+      },
+      {
+        "path": "test/fixtures/legacy-python/ruff.toml",
+        "sha256": "000bae5d213cd65203576086c139eefd00a039c4f39cde607316fcd9cac2c2a9"
+      },
+      {
+        "path": "test/fixtures/legacy-python/service/api.py",
+        "sha256": "f6244911a8079916e0f13828f9a5f47a2fe3da5331aef2c1f54787e0cb0e8522"
+      },
+      {
+        "path": "test/fixtures/legacy-python/tests/test_api.py",
+        "sha256": "e6066d1b731c205892f8b879bce26a423b4cf6607f43c23aa744d0a1f695b14a"
+      },
+      {
+        "path": "test/fixtures/negative-invocation/case.json",
+        "sha256": "6d16bfbce6cf0f63feac7dbc5cdea242defb61b9fa667265e970d6576cf0aa7f"
+      },
+      {
+        "path": "test/fixtures/new-project/package.json",
+        "sha256": "82a098a18f0d1f22a91000dfba43fab9f874f70a1dcf7292fe810d7eac0732f7"
+      },
+      {
+        "path": "test/fixtures/new-project/src/app.mjs",
+        "sha256": "fef9265b1a1945978504f1fe87690fdb21b2777d892908a260fb640549048aba"
+      },
+      {
+        "path": "test/fixtures/standard-run/corrective-graph-request.json",
+        "sha256": "f58b6e7327929bd9add444a23b0f39186fc2bcf11c14b36081b4757af9d0f7e1"
+      },
+      {
+        "path": "test/fixtures/standard-run/corrective-request.json",
+        "sha256": "c7b4db10f7527eff3907a58b8518e053965a1020e40b07eeb0439f5269333b09"
+      },
+      {
+        "path": "test/fixtures/standard-run/decision-request.json",
+        "sha256": "dee3a5ece6d7a487e415692e5f0f898624cd0fd72ee0a6e28f0362e821a9fb94"
+      },
+      {
+        "path": "test/fixtures/standard-run/fitness-request.json",
+        "sha256": "8b39ad9f2cfe56c6f80500a16cecc6ed95b793237749d80d0b045ce88e399a43"
+      },
+      {
+        "path": "test/fixtures/standard-run/graph-request.json",
+        "sha256": "0a9e2864ff5708ebfe82ee65699348c818c99ecc5ab0737bea3a22ac9cd86cc6"
+      },
+      {
+        "path": "test/fixtures/standard-run/hard-decision-request.json",
+        "sha256": "f094e156d274820eb55701aaecba5d44a89e424fc81259412120ebbad8f9f284"
+      },
+      {
+        "path": "test/fixtures/standard-run/package.json",
+        "sha256": "1bf0e53fc74b05f1aade7451fbac72f1944b067d4229d96bae7a225519a250e4"
+      },
+      {
+        "path": "test/fixtures/standard-run/restart-request.json",
+        "sha256": "901931832b256024cf2e106f426962033421e3535fba7a02154a2573f88b1730"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/adversarial-worker.mjs",
+        "sha256": "54a0ab29c01c504c9fcd8b887db5c76c44e8ea3ee0c07df76efae1f92b3458de"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/advisor.mjs",
+        "sha256": "3e8610424dd7346a47fb98bdf94fa4199c969b1ca3451838b13313498839b1db"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/build.mjs",
+        "sha256": "3aab094d827c9a719e6baee62fd69247c0f553795b2f74cbf068988ef25cde8b"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/corrective-review.mjs",
+        "sha256": "4ceb1d85bd5985b31663ea026b61fd0765e31c15ab18ce6abc127dd59b8d992b"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-comparison.mjs",
+        "sha256": "cb1f4f1dac2055e6c519386c323f4db5e9ecbf53f660f92fa9faaf7cfc667a1c"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-documentation.mjs",
+        "sha256": "5f83cd53c72d4460371d8b0fb95be6ec5a4ea594bec63abed9c6a4b8dbab4255"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-version.mjs",
+        "sha256": "94f45beca548a1c31dd8824ad87560274547ee43187ef2e4f669d555f9ccc50a"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/graph-build.mjs",
+        "sha256": "2d77f1504b22791c0ef63cdf746c5866b591eb8be6ae7727c9706512cc91e430"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/graph-observe.mjs",
+        "sha256": "6b4eddfd5246305b0cf83a928fc1981e70ce92d9e64f8c2431f482b0f80d4c62"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/leaky-ticket-verification.mjs",
+        "sha256": "0dd9c4359779e715949e3556bce04ec728264a76f31b5b0623e64af67877da05"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/mutating-ticket-verification.mjs",
+        "sha256": "45466c24e833aa0164a3125f0ef6e79467fe973aa24cb479bec238e9ccbc1906"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/observe.mjs",
+        "sha256": "7e7afafc5c1267b7209f0f2c29a8f1afd7ada16dd13ed4724f05a38a95ac2050"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/planner.mjs",
+        "sha256": "bc1171953d611ed526cd092df2cb5ef6d47cc6347e7d0c8f57d482ba54669bf0"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/quality-review.mjs",
+        "sha256": "8142281f6b6dacf95698e7df91f1aafa85be5acfe1eeade6c589d4d2fb43f8a0"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/research.mjs",
+        "sha256": "f3d0aa175df30cbeae495403543a9ce6b96a4a9a2e3baa7eb204e920b32f6445"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/spec-review.mjs",
+        "sha256": "280405a1b08b3ddba5ce79cbce3c10e313b929278137e4313cab89cfa107408e"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/stale-index-filter.mjs",
+        "sha256": "2842f040fdc02ba1a70093f50bbb7f863f315378b38e2ca05aeec22f1412bee7"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/stale-mutation.mjs",
+        "sha256": "b505294987bb031caf48abf835a270a92ae2a0d2a7c9a8c45af0e525a1552774"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/ticket-verification.mjs",
+        "sha256": "a9595a27d78840449b65e886e131956e410c890b524bf5abf42dd80bff3fc9b3"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/worker.mjs",
+        "sha256": "71ccadd85956e902420b9a7fa06f9d53145bc5edf3c1c85e33285e1435307715"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/audience.mjs",
+        "sha256": "ab4a565434ec117f2e0148d7175a6cbf3cb28aecdae9015aa8e6079b748d3594"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/message.mjs",
+        "sha256": "a209a7384ee677d3439cf25ff82984d7e2db65339a1959253dba4c0a9ccc3a51"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/punctuation.mjs",
+        "sha256": "6b844229f73472153833342e52daf07d39bffada318dc6ce6c046222a9c1d5dd"
+      },
+      {
+        "path": "test/fixtures/standard-run/stale-evidence-request.json",
+        "sha256": "3049734d9a7e5ec3e65c2d49fd9fcc6940b821e0555d8730f40413ea45f253bc"
+      },
+      {
+        "path": "test/fixtures/standard-run/standard-request.json",
+        "sha256": "2db4418d0815e6fdbaf28607358dd19f7b5bbfb067576d1e7948ff123f162ae4"
+      },
+      {
+        "path": "test/fixtures/standard-run/sync-request.json",
+        "sha256": "b061ed0c0e00fc77bcd79722a24ed997d193b785b1d33bf0616a48b3822a9885"
+      },
+      {
+        "path": "test/fixtures/standard-run/sync-restart-request.json",
+        "sha256": "a3ff97a5bd0687de27e3207e078d6f9561b89788313af04082ab776b5c2e9166"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/audience.test.mjs",
+        "sha256": "0a4b7103498d92c2f3640d2f0e3a1ae4645d88dbc94b3c49bedff34882b55829"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/message.test.mjs",
+        "sha256": "41b70b9ddc2ee9a8b7a4e3b6e1ee3d4ccc80612becedc4e5c7bae0d9a535a752"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/punctuation.test.mjs",
+        "sha256": "b1c1f84ca880a40165f80e93730cca73bee86ba68a2456ff16539846ef88407c"
+      },
+      {
+        "path": "test/fixtures/standard-run/verification-registry.json",
+        "sha256": "1999c440e66cb52124f7cba691bae2431cc3159e8be0b1959c999dda22865a0a"
+      },
+      {
+        "path": "test/smoke/install.test.mjs",
+        "sha256": "b40532f995948a03951c79b2063fe9dd38dbc085dd63126459ab63a76474ede9"
+      },
+      {
+        "path": "test/smoke/platform.test.mjs",
+        "sha256": "b1575c3be48893d1f28ee75cde9a79a098d2de8e3c3aede29d6463c3300f81e6"
+      },
+      {
+        "path": "test/support/process.mjs",
+        "sha256": "3f2ebdb16accb513defabb0d4bd83cbe5604dd90100ee590d26268abd7c34dd9"
+      },
+      {
+        "path": "test/support/snapshot.mjs",
+        "sha256": "afb0fe6418167dbf321d2a1b933e10b6f324e025bb97d3df8ca710460a547e43"
+      },
+      {
+        "path": "test/unit/advisor-gate.test.mjs",
+        "sha256": "0b2ca0585f0ad6da92f17a5ec99bae5303bb53588d0ea7d61e73ec319613ec63"
+      },
+      {
+        "path": "test/unit/capability-contracts.test.mjs",
+        "sha256": "90501a19106dc2cc2e9b9b516584ee801c3fd507c841fce7e858ac79f928e878"
+      },
+      {
+        "path": "test/unit/capability-qualification.test.mjs",
+        "sha256": "fa0eca016d338059fc3909b113d257a9c54289a951e5d7c6be7a4121f9223578"
+      },
+      {
+        "path": "test/unit/contracts.test.mjs",
+        "sha256": "b087494ee9130f232491652a3aac7b542c2b74b483586fe7a6710821c6d71e4d"
+      },
+      {
+        "path": "test/unit/deep-contracts.test.mjs",
+        "sha256": "2f726b2174efacc314c7ee1281e9eb0219304c0b50da0c5442db76db43b8d8eb"
+      },
+      {
+        "path": "test/unit/deep-parallel-run.test.mjs",
+        "sha256": "217e779bf92bb70fe05a57b9c95bd314a937ef859ae872d955f64832da8d3f6e"
+      },
+      {
+        "path": "test/unit/deep-run.test.mjs",
+        "sha256": "d08a402e795e0e5164608b4d329073ed6ede33f47ac1516b97d44277540da002"
+      },
+      {
+        "path": "test/unit/fast-run.test.mjs",
+        "sha256": "d5cdc9eab61cd95a1621cde91a22e07e6550988fa4ea04dd11dae942d4be7124"
+      },
+      {
+        "path": "test/unit/fitness-contracts.test.mjs",
+        "sha256": "50d81016f788e2ff969825ef2f3dfeb589bd23213ea5c21fb4da86d3cda5ffe5"
+      },
+      {
+        "path": "test/unit/launcher.test.mjs",
+        "sha256": "17612d3bb8fa16aaaf5caf72bbf7a7edddb3ce7e0e6532fa9dd9049a9da01e48"
+      },
+      {
+        "path": "test/unit/metadata.test.mjs",
+        "sha256": "3b4b1ee62d8fb89dc6db78e116580b2ca6f98b6c042408fee67e018ff2672cb4"
+      },
+      {
+        "path": "test/unit/mode-policy.test.mjs",
+        "sha256": "49cd66085f58f7ef05b0c8f951c7f9a64991c7bd12ae5edfe44e72292808b516"
+      },
+      {
+        "path": "test/unit/normalization.test.mjs",
+        "sha256": "805fb4608cf45e80412310e5ba50c635fd2205cbd1a9b903bbda56412e55af3e"
+      },
+      {
+        "path": "test/unit/onboarding.test.mjs",
+        "sha256": "ca269113046740705c121aaabfb05cd3a69c0ee1e572c63ca73abe382075036e"
+      },
+      {
+        "path": "test/unit/parallel-eligibility.test.mjs",
+        "sha256": "e9414ef0a1ba60f6dec1ad3bfd89ce146a8cfa2631f7f82859aa1308bcacd3c5"
+      },
+      {
+        "path": "test/unit/qualification.test.mjs",
+        "sha256": "ec587cf91a0b25148662d11d7a01be6ddfb84c7ff8cee01bb5eafafb299f4e48"
+      },
+      {
+        "path": "test/unit/review-contracts.test.mjs",
+        "sha256": "2e8e4fc900093e2f5a41a0a7592eef7ee28e049b330f714f41b222e0d6cd3439"
+      },
+      {
+        "path": "test/unit/runtime-doctor.test.mjs",
+        "sha256": "9a58e17d074ad3a1e56c59f2b4fd6ac80494564d1969aa2f193e32d1a5d67a94"
+      },
+      {
+        "path": "test/unit/runtime-upgrade.test.mjs",
+        "sha256": "cc882d8ac75dd4c154f9310de406cecbbdbdef7f2a1acf769b36dd1518ca80d2"
+      },
+      {
+        "path": "test/unit/standard-run.test.mjs",
+        "sha256": "008eb032f82f70cf8d6fc4e0c7c9468e8a6733056334aaba90b964a2f2c58cea"
+      },
+      {
+        "path": "test/unit/worker-contract-rejection.test.mjs",
+        "sha256": "582563855bd44616ff3ff071f49d7735a7d72f35f1c9332a5824ec667193868a"
+      }
+    ],
+    "baseRevision": "6bfd8eaa3424883bb9053e835566a1ad1ce16592",
+    "rawChildOutputPersisted": false,
+    "commands": [
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/onboarding.test.mjs",
+        "testName": "Global Launcher onboards and delegates Engineering Runs to project-owned state"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/normalization.test.mjs",
+        "testName": "exact hash approval applies a legacy manifest and reaches Prepared Project"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/runtime-doctor.test.mjs",
+        "testName": "healthy Prepared Project diagnosis is READY and read-only"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/runtime-doctor.test.mjs",
+        "testName": "missing and drifted owned generated runtime files are repairable and dry-run is read-only"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/fast-run.test.mjs",
+        "testName": "FAST restores and blocks direct mutation of the Integration worktree"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/standard-run.test.mjs",
+        "testName": "remote divergence stops at a Human Gate without overwriting either history"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/standard-run.test.mjs",
+        "testName": "interrupted STANDARD graph resumes from durable state without chat history"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/fast-run.test.mjs",
+        "testName": "a small cross-file task completes the FAST lifecycle without spec or tickets"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/standard-run.test.mjs",
+        "testName": "ambiguous STANDARD records research before one durable decision gate and never starts Worker"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/advisor-gate.test.mjs",
+        "testName": "Advisor REVISE reports MISSING_VERIFICATION before Worker"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/deep-parallel-run.test.mjs",
+        "testName": "a conflicting Worker result creates BLOCKED corrective work without changing accepted integration"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/advisor-gate.test.mjs",
+        "testName": "two unresolved Advisor REVISE rounds create a terminal Human Gate before Worker"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/worker-contract-rejection.test.mjs",
+        "testName": "partial-worker is rejected before a Root checkpoint"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/fast-run.test.mjs",
+        "testName": "a passing Quality Review cannot override a failing instrumental check"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/fast-run.test.mjs",
+        "testName": "FAST blocks output beyond the exact Write Lease before committing"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/deep-parallel-run.test.mjs",
+        "testName": "overlapping DEEP Write Leases execute strictly sequentially"
+      },
+      {
+        "seam": "BLACK_BOX_ENGINEERING_LOOP",
+        "testFile": "test/unit/deep-parallel-run.test.mjs",
+        "testName": "resume discards and replays a bounded pre-commit Worker result from durable HEAD"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/mode-policy.test.mjs",
+        "testName": "the public policy contract excludes file count from Task Profile evidence"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/standard-run.test.mjs",
+        "testName": "one-ticket STANDARD run reaches READY_FOR_HUMAN through the bounded lifecycle"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/review-contracts.test.mjs",
+        "testName": "generic PASS without evidence is rejected"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/normalization.test.mjs",
+        "testName": "Migration Manifest is complete and its hash binds every path and action"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/runtime-doctor.test.mjs",
+        "testName": "working-tree ownership metadata without a committed manifest is never READY"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/fast-run.test.mjs",
+        "testName": "FAST prevents protected ref mutation and preserves main"
+      },
+      {
+        "seam": "DETERMINISTIC_CONTRACT",
+        "testFile": "test/unit/capability-qualification.test.mjs",
+        "testName": "the installed Project Runtime exposes explicit capability qualification"
+      }
+    ]
+  }
+}
