@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add the real V1 acceptance lifecycle command and bounded weighted evidence
+  report, including durable resume, controlled correction, fresh verification,
+  safe Run Branch sync, and a terminal `READY_FOR_HUMAN` gate.
 - Configure the repository engineering skills for GitHub Issues and
   single-context domain documentation.
 - Add a reproducible V1 qualification command with a pinned black-box fixture,

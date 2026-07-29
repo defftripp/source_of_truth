@@ -173,6 +173,22 @@ URLs, raw child logs, provider payloads, or chat transcript. Reviewer opinion
 cannot override a failed mandatory result. Additional Linux execution remains
 an explicit V1 limitation until evidence is supplied.
 
+## V1 acceptance
+
+The maintainer acceptance command executes one actual project-local STANDARD
+lifecycle against an isolated Target Project and bare remote. It proves
+preparation, classification, planning, execution, checkpoint portability,
+review-driven correction, fresh reviews and checks, bounded redaction, safe
+Remote Checkpoint Sync, and the weighted V1 scorecard. Successful automation
+still stops at `READY_FOR_HUMAN`; acceptance, protected-branch integration,
+deployment, release, and parent issue closure remain external human actions.
+The automated phase persists `manualReview: PENDING` and a content hash, then
+exits non-zero. A maintainer must inspect that exact bounded report and finalize
+the hash in a separate invocation. Finalization refuses report drift, reruns the
+deny-list, and atomically records the independent manual review. Scorecard and
+chronology evidence IDs must resolve through the report evidence catalog;
+artifact IDs additionally bind to files in the aggregate diff.
+
 Each blocking finding is mapped one-to-one to a bounded corrective Execution
 Ticket containing its immutable source finding, blockers, Write Lease, context,
 and targeted verification contract. Root appends those tickets to the same

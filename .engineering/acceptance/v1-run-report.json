@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "issue": 37,
+  "status": "READY_FOR_HUMAN",
+  "terminal": true,
+  "accepted": false,
+  "generatedAt": "2026-07-29T11:50:55.000Z",
+  "execution": {
+    "baseRevision": "f762638168145ac079d51405407edf30bf48528f",
+    "sourceFiles": [
+      {
+        "path": "package-lock.json",
+        "sha256": "cb520f8397b7be6eb5259535959e76c3346dc36addfb0e5c50fbd17fed879977"
+      },
+      {
+        "path": "package.json",
+        "sha256": "87dcbabeef7a23dbc11f8b91de6962bb1e372ed7e374be3d1bd5e8e5ddebaa19"
+      },
+      {
+        "path": "skills/engineering-loop/SKILL.md",
+        "sha256": "1d0825abd0b462111d7bd8fedcf5977922d8484a7046130fe2ab33b8274972ae"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/capability-contracts.mjs",
+        "sha256": "9acaa3eaf7c0f111777508a57c5d7b77951bb2a865d8de34f240d0e4d22bda36"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/contracts.mjs",
+        "sha256": "09753db7369f501a615a59bb5e71db5ebb3e852a228c595fe87358557b4c39d3"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/deep-contracts.mjs",
+        "sha256": "768411bbe687a9b87be6ab3fee6d2d1d2ac7c96284734ac45006497579a9ab58"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/doctor-contracts.mjs",
+        "sha256": "5b88d18c2296e04a0f1c2e6f1098f58eba4f4506b4a6a999bdefce5acd8ad12d"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/engine.mjs",
+        "sha256": "8291ddf31924defc816b0be03964836d267b07b14fb578589401d19a2573ef09"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/fitness-contracts.mjs",
+        "sha256": "a0392bc0b400e9955da224ed6d41086dc7068783b7fb883c801fa874f3f679b4"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/methodology.md",
+        "sha256": "2a82183abaef4bac8c47e584f744723f458ea588e3b43467f0e7e2c2124d7826"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/mode-policy.mjs",
+        "sha256": "95486d0c57cf1527eb16fd83fd9bdb4b06ed21e42b38874218a783a0fc20f541"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/parallel-eligibility.mjs",
+        "sha256": "8c5951326dfd9a3f10264e65849ac84dd94c084a1dbf9f4e2fcd9ff3942c234a"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/review-contracts.mjs",
+        "sha256": "29c9755f1dd074b4fa26e1362da75c01c2529ee4963f734744639b4b5a902c66"
+      },
+      {
+        "path": "skills/engineering-loop/runtime/upgrade-contracts.mjs",
+        "sha256": "97c4d0f7e3fd685c18ec1162e2feedc8d1b779bfb3f19024295ae30fda1c9a69"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/accept.mjs",
+        "sha256": "5017b0bb381b8d8b0ded50407a0e4fd1f841dab231a4a0b2a97476fcd7e6777b"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/apply.mjs",
+        "sha256": "92935eb4ff5d3c1b6312b606a95d3b4cd4a06ae652425fef3cf8c65613381357"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/normalize.mjs",
+        "sha256": "82af7cbbf0e4fe5f361059262e66ef52c9fb1bfd82e4d7cca9203aa7b5064c98"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/onboard.mjs",
+        "sha256": "079f070ab849e98fc829cab08f244e7b97d4759e6a967be49ff1fda911f97237"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/qualify.mjs",
+        "sha256": "da62a85a5a2a018ddce307b7846bc467236c9b9211235c9d7734092bda7e7349"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/readiness.mjs",
+        "sha256": "db2bdf9e60cce626afc570827c98f06a08765015b3caf139fcca59c6846f1b89"
+      },
+      {
+        "path": "skills/engineering-loop/scripts/shell.mjs",
+        "sha256": "870f92a3aed7a37d9cf1f1926fbaa9aaab823a5bc18f06dfa74092584947aa48"
+      },
+      {
+        "path": "test/fixtures/standard-run/acceptance-request.json",
+        "sha256": "f2bfe71ae380fec5eea1ee9b3ec2159679dd914eaee6686f748cd4605d66d25d"
+      },
+      {
+        "path": "test/fixtures/standard-run/corrective-graph-request.json",
+        "sha256": "f58b6e7327929bd9add444a23b0f39186fc2bcf11c14b36081b4757af9d0f7e1"
+      },
+      {
+        "path": "test/fixtures/standard-run/corrective-request.json",
+        "sha256": "c7b4db10f7527eff3907a58b8518e053965a1020e40b07eeb0439f5269333b09"
+      },
+      {
+        "path": "test/fixtures/standard-run/decision-request.json",
+        "sha256": "dee3a5ece6d7a487e415692e5f0f898624cd0fd72ee0a6e28f0362e821a9fb94"
+      },
+      {
+        "path": "test/fixtures/standard-run/fitness-request.json",
+        "sha256": "8b39ad9f2cfe56c6f80500a16cecc6ed95b793237749d80d0b045ce88e399a43"
+      },
+      {
+        "path": "test/fixtures/standard-run/graph-request.json",
+        "sha256": "0a9e2864ff5708ebfe82ee65699348c818c99ecc5ab0737bea3a22ac9cd86cc6"
+      },
+      {
+        "path": "test/fixtures/standard-run/hard-decision-request.json",
+        "sha256": "f094e156d274820eb55701aaecba5d44a89e424fc81259412120ebbad8f9f284"
+      },
+      {
+        "path": "test/fixtures/standard-run/package.json",
+        "sha256": "1bf0e53fc74b05f1aade7451fbac72f1944b067d4229d96bae7a225519a250e4"
+      },
+      {
+        "path": "test/fixtures/standard-run/restart-request.json",
+        "sha256": "901931832b256024cf2e106f426962033421e3535fba7a02154a2573f88b1730"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/adversarial-worker.mjs",
+        "sha256": "54a0ab29c01c504c9fcd8b887db5c76c44e8ea3ee0c07df76efae1f92b3458de"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/advisor.mjs",
+        "sha256": "3e8610424dd7346a47fb98bdf94fa4199c969b1ca3451838b13313498839b1db"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/build.mjs",
+        "sha256": "3aab094d827c9a719e6baee62fd69247c0f553795b2f74cbf068988ef25cde8b"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/corrective-review.mjs",
+        "sha256": "4ceb1d85bd5985b31663ea026b61fd0765e31c15ab18ce6abc127dd59b8d992b"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-comparison.mjs",
+        "sha256": "cb1f4f1dac2055e6c519386c323f4db5e9ecbf53f660f92fa9faaf7cfc667a1c"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-documentation.mjs",
+        "sha256": "5f83cd53c72d4460371d8b0fb95be6ec5a4ea594bec63abed9c6a4b8dbab4255"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/fitness-version.mjs",
+        "sha256": "94f45beca548a1c31dd8824ad87560274547ee43187ef2e4f669d555f9ccc50a"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/graph-build.mjs",
+        "sha256": "2d77f1504b22791c0ef63cdf746c5866b591eb8be6ae7727c9706512cc91e430"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/graph-observe.mjs",
+        "sha256": "6b4eddfd5246305b0cf83a928fc1981e70ce92d9e64f8c2431f482b0f80d4c62"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/leaky-ticket-verification.mjs",
+        "sha256": "0dd9c4359779e715949e3556bce04ec728264a76f31b5b0623e64af67877da05"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/mutating-ticket-verification.mjs",
+        "sha256": "45466c24e833aa0164a3125f0ef6e79467fe973aa24cb479bec238e9ccbc1906"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/observe.mjs",
+        "sha256": "7e7afafc5c1267b7209f0f2c29a8f1afd7ada16dd13ed4724f05a38a95ac2050"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/planner.mjs",
+        "sha256": "bc1171953d611ed526cd092df2cb5ef6d47cc6347e7d0c8f57d482ba54669bf0"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/quality-review.mjs",
+        "sha256": "8142281f6b6dacf95698e7df91f1aafa85be5acfe1eeade6c589d4d2fb43f8a0"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/research.mjs",
+        "sha256": "f3d0aa175df30cbeae495403543a9ce6b96a4a9a2e3baa7eb204e920b32f6445"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/spec-review.mjs",
+        "sha256": "280405a1b08b3ddba5ce79cbce3c10e313b929278137e4313cab89cfa107408e"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/stale-index-filter.mjs",
+        "sha256": "2842f040fdc02ba1a70093f50bbb7f863f315378b38e2ca05aeec22f1412bee7"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/stale-mutation.mjs",
+        "sha256": "b505294987bb031caf48abf835a270a92ae2a0d2a7c9a8c45af0e525a1552774"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/ticket-verification.mjs",
+        "sha256": "a9595a27d78840449b65e886e131956e410c890b524bf5abf42dd80bff3fc9b3"
+      },
+      {
+        "path": "test/fixtures/standard-run/scripts/worker.mjs",
+        "sha256": "71ccadd85956e902420b9a7fa06f9d53145bc5edf3c1c85e33285e1435307715"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/audience.mjs",
+        "sha256": "ab4a565434ec117f2e0148d7175a6cbf3cb28aecdae9015aa8e6079b748d3594"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/message.mjs",
+        "sha256": "a209a7384ee677d3439cf25ff82984d7e2db65339a1959253dba4c0a9ccc3a51"
+      },
+      {
+        "path": "test/fixtures/standard-run/src/punctuation.mjs",
+        "sha256": "6b844229f73472153833342e52daf07d39bffada318dc6ce6c046222a9c1d5dd"
+      },
+      {
+        "path": "test/fixtures/standard-run/stale-evidence-request.json",
+        "sha256": "3049734d9a7e5ec3e65c2d49fd9fcc6940b821e0555d8730f40413ea45f253bc"
+      },
+      {
+        "path": "test/fixtures/standard-run/standard-request.json",
+        "sha256": "2db4418d0815e6fdbaf28607358dd19f7b5bbfb067576d1e7948ff123f162ae4"
+      },
+      {
+        "path": "test/fixtures/standard-run/sync-request.json",
+        "sha256": "b061ed0c0e00fc77bcd79722a24ed997d193b785b1d33bf0616a48b3822a9885"
+      },
+      {
+        "path": "test/fixtures/standard-run/sync-restart-request.json",
+        "sha256": "a3ff97a5bd0687de27e3207e078d6f9561b89788313af04082ab776b5c2e9166"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/audience.test.mjs",
+        "sha256": "0a4b7103498d92c2f3640d2f0e3a1ae4645d88dbc94b3c49bedff34882b55829"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/message.test.mjs",
+        "sha256": "41b70b9ddc2ee9a8b7a4e3b6e1ee3d4ccc80612becedc4e5c7bae0d9a535a752"
+      },
+      {
+        "path": "test/fixtures/standard-run/test/punctuation.test.mjs",
+        "sha256": "b1c1f84ca880a40165f80e93730cca73bee86ba68a2456ff16539846ef88407c"
+      },
+      {
+        "path": "test/fixtures/standard-run/verification-registry.json",
+        "sha256": "1999c440e66cb52124f7cba691bae2431cc3159e8be0b1959c999dda22865a0a"
+      },
+      {
+        "path": "test/support/process.mjs",
+        "sha256": "e96a8e2ee6908d60d37afbebb01dd286a03e89bbdf62ea5a13a0ea578a5ffd91"
+      },
+      {
+        "path": "test/support/snapshot.mjs",
+        "sha256": "afb0fe6418167dbf321d2a1b933e10b6f324e025bb97d3df8ca710460a547e43"
+      },
+      {
+        "path": "test/unit/acceptance-lifecycle.test.mjs",
+        "sha256": "e3d37a02abbad9a7253f4651d3557cee657205e40f1cc226054cb1ebb041ca89"
+      }
+    ],
+    "sourceFingerprint": "1cf37c9a5bfd3421a870b75ca4c3943387b7989ea7a4cd22033df97663ce874a"
+  },
+  "targetProject": {
+    "prepared": true,
+    "taskProfile": "STANDARD",
+    "runBranch": "run/standard/20260729114923084-e45b748d"
+  },
+  "chronology": [
+    {
+      "sequence": 1,
+      "stage": "PROJECT_PREPARATION",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "project:prepared",
+        "commit:8d19abdd57fd254015efc8c910380c8352cdaeba"
+      ]
+    },
+    {
+      "sequence": 2,
+      "stage": "TASK_PROFILE_CLASSIFICATION",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "task-profile:STANDARD"
+      ]
+    },
+    {
+      "sequence": 3,
+      "stage": "RESEARCH",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "artifact:research.json"
+      ]
+    },
+    {
+      "sequence": 4,
+      "stage": "PLANNING",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "artifact:ticket-graph.json"
+      ]
+    },
+    {
+      "sequence": 5,
+      "stage": "ADVISOR_GATE",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "artifact:advisor.json"
+      ]
+    },
+    {
+      "sequence": 6,
+      "stage": "EXECUTION",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "commit:12a4ebfd159efe8dce0894c9f6a6059a3088669d",
+        "commit:2c7b01c035aeb94359485afae64b96f073ce5ac0",
+        "commit:9203e0935d5402c5541b610850beb3077ecf17fd",
+        "commit:85db5a4acaa4fb74a3b56af1aad45f01dc4acda0"
+      ]
+    },
+    {
+      "sequence": 7,
+      "stage": "REMOTE_CHECKPOINT",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "commit:12a4ebfd159efe8dce0894c9f6a6059a3088669d"
+      ]
+    },
+    {
+      "sequence": 8,
+      "stage": "DURABLE_RESUME",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "state:RESUMED",
+        "commit:12a4ebfd159efe8dce0894c9f6a6059a3088669d"
+      ]
+    },
+    {
+      "sequence": 9,
+      "stage": "REVIEW_BLOCKED",
+      "observedAt": "2026-07-29T11:50:32.000Z",
+      "evidenceIds": [
+        "review-round:1",
+        "finding:FINDING-1"
+      ]
+    },
+    {
+      "sequence": 10,
+      "stage": "CONTROLLED_CORRECTION",
+      "observedAt": "2026-07-29T11:50:55.000Z",
+      "evidenceIds": [
+        "commit:85db5a4acaa4fb74a3b56af1aad45f01dc4acda0"
+      ]
+    },
+    {
+      "sequence": 11,
+      "stage": "FRESH_REVIEWS",
+      "observedAt": "2026-07-29T11:50:55.000Z",
+      "evidenceIds": [
+        "review-round:2",
+        "spec-review:PASS",
+        "quality-review:PASS",
+        "commit:d4543e2cbebb66af14664d1e7e9410f0dd8d0601"
+      ]
+    },
+    {
+      "sequence": 12,
+      "stage": "FINAL_VERIFICATION",
+      "observedAt": "2026-07-29T11:50:55.000Z",
+      "evidenceIds": [
+        "verification:full-relevant:PASS",
+        "commit:d4543e2cbebb66af14664d1e7e9410f0dd8d0601"
+      ]
+    },
+    {
+      "sequence": 13,
+      "stage": "REMOTE_SYNC",
+      "observedAt": "2026-07-29T11:50:55.000Z",
+      "evidenceIds": [
+        "remote-branch:run/standard/20260729114923084-e45b748d",
+        "remote-sync:PASS"
+      ]
+    },
+    {
+      "sequence": 14,
+      "stage": "READY_FOR_HUMAN",
+      "observedAt": "2026-07-29T11:50:55.000Z",
+      "evidenceIds": [
+        "commit:d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+        "terminal:READY_FOR_HUMAN"
+      ]
+    }
+  ],
+  "evidenceCatalog": [
+    "artifact:advisor-rounds.json",
+    "artifact:advisor.json",
+    "artifact:context-packet.json",
+    "artifact:corrective-work.json",
+    "artifact:quality-review-2.json",
+    "artifact:quality-review.json",
+    "artifact:remote-sync.json",
+    "artifact:research.json",
+    "artifact:result.json",
+    "artifact:spec-lite.json",
+    "artifact:spec-review-2.json",
+    "artifact:spec-review.json",
+    "artifact:state.json",
+    "artifact:task-profile.json",
+    "artifact:ticket-graph.json",
+    "artifact:ticket.json",
+    "artifact:verification.json",
+    "commit:12a4ebfd159efe8dce0894c9f6a6059a3088669d",
+    "commit:2c7b01c035aeb94359485afae64b96f073ce5ac0",
+    "commit:85db5a4acaa4fb74a3b56af1aad45f01dc4acda0",
+    "commit:8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "commit:9203e0935d5402c5541b610850beb3077ecf17fd",
+    "commit:d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+    "finding:FINDING-1",
+    "project:prepared",
+    "quality-review:PASS",
+    "remote-branch:run/standard/20260729114923084-e45b748d",
+    "remote-sync:PASS",
+    "review-round:1",
+    "review-round:2",
+    "spec-review:PASS",
+    "state:RESUMED",
+    "task-profile:STANDARD",
+    "terminal:READY_FOR_HUMAN",
+    "verification:full-relevant:PASS"
+  ],
+  "resume": {
+    "status": "PASS",
+    "fromRemoteCheckpoint": true,
+    "checkpointCommit": "12a4ebfd159efe8dce0894c9f6a6059a3088669d",
+    "chatHistoryUsed": false
+  },
+  "correction": {
+    "status": "PASS",
+    "findingId": "FINDING-1",
+    "ticketId": "CORRECTION-R1-1",
+    "commit": "85db5a4acaa4fb74a3b56af1aad45f01dc4acda0",
+    "completedAt": "2026-07-29T14:50:32+03:00",
+    "reviewRound": 1,
+    "freshReviewRound": 2,
+    "freshReviewCommit": "d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+    "freshReviewsAt": "2026-07-29T11:50:55.000Z",
+    "freshChecks": true,
+    "finalVerificationCommit": "d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+    "finalVerificationAt": "2026-07-29T11:50:55.000Z",
+    "freshReviewDescendsFromCorrection": true,
+    "finalVerificationDescendsFromCorrection": true,
+    "finalHeadDescendsFromCorrection": true
+  },
+  "remoteSync": {
+    "status": "PASS",
+    "remote": "origin",
+    "branch": "run/standard/20260729114923084-e45b748d",
+    "head": "d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+    "changedRefs": [
+      "refs/heads/run/standard/20260729114923084-e45b748d"
+    ],
+    "forcePush": false
+  },
+  "protectedRefs": {
+    "status": "PASS",
+    "developBefore": "8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "developAfter": "8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "mainBefore": "8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "mainAfter": "8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "sourceHeadBefore": "f762638168145ac079d51405407edf30bf48528f",
+    "sourceHeadAfter": "f762638168145ac079d51405407edf30bf48528f",
+    "developUnchanged": true,
+    "mainUnchanged": true,
+    "sourceRepositoryUnchanged": true,
+    "deploymentTriggered": false,
+    "issue16Closed": false
+  },
+  "aggregateDiff": {
+    "status": "PASS",
+    "base": "8d19abdd57fd254015efc8c910380c8352cdaeba",
+    "head": "d4543e2cbebb66af14664d1e7e9410f0dd8d0601",
+    "files": [
+      ".engineering/runs/20260729114923084-e45b748d/advisor-rounds.json",
+      ".engineering/runs/20260729114923084-e45b748d/advisor.json",
+      ".engineering/runs/20260729114923084-e45b748d/context-packet.json",
+      ".engineering/runs/20260729114923084-e45b748d/corrective-work.json",
+      ".engineering/runs/20260729114923084-e45b748d/quality-review-2.json",
+      ".engineering/runs/20260729114923084-e45b748d/quality-review.json",
+      ".engineering/runs/20260729114923084-e45b748d/remote-sync.json",
+      ".engineering/runs/20260729114923084-e45b748d/research.json",
+      ".engineering/runs/20260729114923084-e45b748d/result.json",
+      ".engineering/runs/20260729114923084-e45b748d/spec-lite.json",
+      ".engineering/runs/20260729114923084-e45b748d/spec-review-2.json",
+      ".engineering/runs/20260729114923084-e45b748d/spec-review.json",
+      ".engineering/runs/20260729114923084-e45b748d/state.json",
+      ".engineering/runs/20260729114923084-e45b748d/task-profile.json",
+      ".engineering/runs/20260729114923084-e45b748d/ticket-graph.json",
+      ".engineering/runs/20260729114923084-e45b748d/ticket.json",
+      ".engineering/runs/20260729114923084-e45b748d/verification.json",
+      "src/audience.mjs",
+      "src/message.mjs",
+      "src/punctuation.mjs"
+    ],
+    "hash": "8819d8749b59c025657e09eff7990999270eacc78ad208b37e99a44200c154ea"
+  },
+  "scorecard": {
+    "weightsTotal": 100,
+    "weightedScore": 100,
+    "categories": [
+      {
+        "id": "root-orchestration",
+        "weight": 15,
+        "score": 100,
+        "evidenceIds": [
+          "terminal:READY_FOR_HUMAN",
+          "state:RESUMED"
+        ]
+      },
+      {
+        "id": "modes",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "task-profile:STANDARD"
+        ]
+      },
+      {
+        "id": "research",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "artifact:research.json"
+        ]
+      },
+      {
+        "id": "specs-artifacts",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "artifact:spec-lite.json"
+        ]
+      },
+      {
+        "id": "tickets-graph",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "artifact:ticket-graph.json"
+        ]
+      },
+      {
+        "id": "planner-advisor",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "artifact:advisor.json",
+          "artifact:advisor-rounds.json"
+        ]
+      },
+      {
+        "id": "worker",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "commit:12a4ebfd159efe8dce0894c9f6a6059a3088669d",
+          "commit:2c7b01c035aeb94359485afae64b96f073ce5ac0",
+          "commit:9203e0935d5402c5541b610850beb3077ecf17fd",
+          "commit:85db5a4acaa4fb74a3b56af1aad45f01dc4acda0"
+        ]
+      },
+      {
+        "id": "reviews",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "review-round:1",
+          "review-round:2"
+        ]
+      },
+      {
+        "id": "verification",
+        "weight": 10,
+        "score": 100,
+        "evidenceIds": [
+          "verification:full-relevant:PASS"
+        ]
+      },
+      {
+        "id": "safety-recovery",
+        "weight": 5,
+        "score": 100,
+        "evidenceIds": [
+          "state:RESUMED",
+          "remote-sync:PASS"
+        ]
+      }
+    ]
+  },
+  "redaction": {
+    "automatedScan": "PASS",
+    "manualReview": "PASS",
+    "rawLogsPersisted": false,
+    "chatTranscriptPersisted": false,
+    "providerPayloadPersisted": false,
+    "privateDataPersisted": false,
+    "signedUrlsPersisted": false,
+    "reviewedAt": "2026-07-29T11:51:13.827Z",
+    "reviewedReportHash": "f7afc9b1c5cab68c11bc7b10eb88dc1670d323d081a8afe55770937d8726c6a7"
+  }
+}

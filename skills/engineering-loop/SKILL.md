@@ -99,6 +99,18 @@ Do not infer invocation from a request that merely resembles engineering work.
     scenario, component contract, Windows platform smoke, and deny-list scan
     passes. Never persist child logs or chat transcripts in the report.
 
+16. Maintainers running the real V1 acceptance lifecycle use `npm run accept`.
+    That command must stop with exit `2` and `manualReview: PENDING`. Manually
+    inspect the exact bounded report identified by its printed hash, then run
+    `node skills/engineering-loop/scripts/accept.mjs --target .
+    --finalize-redaction <pending-report-hash>`. Finalization must reject a
+    changed report and rerun the automated deny-list. The evidence is valid only
+    when the finalized report covers preparation, classification, durable
+    resume, controlled correction, fresh commit-bound reviews and checks, safe
+    Remote Checkpoint Sync, catalog-bound score evidence, and terminal
+    `READY_FOR_HUMAN`. It never authorizes `ACCEPTED`, merge, deployment,
+    release, or issue closure.
+
 The delegated executable must be the installed
 `.engineering/runtime/engine.mjs`. Never replace it with files from the Global
 Launcher. Never apply a manifest whose approved hash or current source hashes

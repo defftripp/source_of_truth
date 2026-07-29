@@ -384,6 +384,33 @@ black-box repository emits only a bounded scan summary before cleanup; staged
 Run Artifacts and checkpoint history are scanned, while pre-Git bootstrap
 fixtures are recorded explicitly as `NOT_APPLICABLE`.
 
+## V1 acceptance lifecycle
+
+Run the real acceptance lifecycle from the repository root:
+
+```text
+npm run accept
+```
+
+The command prepares a temporary Target Project, classifies and executes a
+STANDARD graph, interrupts after a durable remote checkpoint, resumes from a
+fresh clone without chat history, converts one blocking review finding into a
+controlled correction, reruns reviews and instrumental checks, and safely
+synchronizes only the Run Branch. It writes a bounded report with
+`manualReview: PENDING`, prints its SHA-256 review hash, and exits `2` at the
+independent maintainer gate. After manually inspecting that exact report, the
+maintainer binds the approval to the printed hash:
+
+```text
+node skills/engineering-loop/scripts/accept.mjs --target . --finalize-redaction <pending-report-hash>
+```
+
+Finalization refuses a changed report, reruns the automated deny-list, and
+atomically records the manual review. The resulting report at
+`.engineering/acceptance/v1-run-report.json` must terminate at
+`READY_FOR_HUMAN` with `accepted: false`. Neither phase merges `develop` or
+`main`, deploys, closes the parent specification, or marks the run `ACCEPTED`.
+
 Remote Checkpoint Sync is off by default. A STANDARD request opts in explicitly:
 
 ```json

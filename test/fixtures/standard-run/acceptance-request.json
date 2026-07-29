@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "summary": "Run the complete V1 acceptance lifecycle",
+    "scope": "MULTI_PART",
+    "risk": "LOW",
+    "ambiguity": "NONE",
+    "reversibility": "EASY"
+  },
+  "repository": {
+    "integrationBranch": "develop",
+    "stableBranch": "main"
+  },
+  "settings": {
+    "remoteCheckpointSync": {
+      "enabled": true,
+      "remote": "origin"
+    }
+  },
+  "writeLease": [
+    "src/message.mjs",
+    "src/audience.mjs",
+    "src/punctuation.mjs"
+  ],
+  "standard": {
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "statement": "The public message export returns the STANDARD result.",
+        "verificationIds": ["ticket-message-test", "graph-observed-behavior"]
+      },
+      {
+        "id": "AC-2",
+        "statement": "The public audience export returns engineers.",
+        "verificationIds": ["ticket-message-test", "graph-observed-behavior"]
+      },
+      {
+        "id": "AC-3",
+        "statement": "The public punctuation export returns an exclamation mark.",
+        "verificationIds": ["ticket-message-test", "graph-observed-behavior"]
+      }
+    ],
+    "testingSeams": [
+      {
+        "id": "SEAM-1",
+        "interface": "The public message, audience, and punctuation module exports.",
+        "verificationIds": ["ticket-message-test"]
+      }
+    ],
+    "contextPaths": [
+      "src/message.mjs",
+      "test/message.test.mjs",
+      "src/audience.mjs",
+      "test/audience.test.mjs",
+      "src/punctuation.mjs",
+      "test/punctuation.test.mjs"
+    ]
+  },
+  "commands": {
+    "research": "repository-research",
+    "planner": "dependency-graph-planner",
+    "advisor": "advisor-gate",
+    "worker": "restart-worker",
+    "ticketVerification": "ticket-message-test",
+    "specReview": "corrective-spec-review",
+    "qualityReview": "corrective-quality-review",
+    "relevantChecks": [
+      "graph-full-test",
+      "typecheck",
+      "graph-build",
+      "graph-observed-behavior"
+    ]
+  }
+}
