@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Configure the repository engineering skills for GitHub Issues and
+  single-context domain documentation.
 - Add a reproducible V1 qualification command with a pinned black-box fixture,
   adversarial scenario, and component coverage manifest; any mandatory failure,
   missing Windows evidence, or redaction finding blocks the bounded report.
